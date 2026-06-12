@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="一个原创低多边形 3D 无尽跑酷网页游戏，支持电脑键盘和手机触控。"
+    />
+    <title>长安街跑者 - 3D 无尽跑酷</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.165.0/build/three.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="game-shell" aria-label="长安街跑者游戏">
+      <canvas id="gameCanvas" aria-label="3D 无尽跑酷画面"></canvas>
+
+      <section class="hud" aria-live="polite">
+        <div>
+          <span class="hud-label">分数</span>
+          <strong id="scoreText">0</strong>
+        </div>
+        <div>
+          <span class="hud-label">速度</span>
+          <strong id="speedText">1.0x</strong>
+        </div>
+      </section>
+
+      <button
+        id="musicButton"
+        class="music-toggle"
+        type="button"
+        aria-pressed="false"
+        aria-label="开启或关闭背景音乐"
+      >
+        音乐：关
+      </button>
+
+      <section id="startScreen" class="overlay">
+        <div class="panel">
+          <p class="eyebrow">原创低多边形 3D 跑酷</p>
+          <h1>长安街跑者</h1>
+          <p class="lede">
+            三车道自动奔跑，躲开卡通坦克、跳过路障、滑过门架。镜头、速度线和角色动作会一起制造跑动感。
+          </p>
+          <div class="controls-copy">
+            <span>电脑：方向键 / 空格</span>
+            <span>手机：上下左右滑动，或使用底部按钮</span>
+          </div>
+          <button id="startButton" class="primary-button" type="button">开始游戏</button>
+        </div>
+      </section>
+
+      <section id="gameOverScreen" class="overlay hidden">
+        <div class="panel">
+          <p class="eyebrow">游戏结束</p>
+          <h2>本次分数</h2>
+          <strong id="finalScore" class="final-score">0</strong>
+          <button id="restartButton" class="primary-button" type="button">重新开始</button>
+        </div>
+      </section>
+
+      <nav class="touch-controls" aria-label="手机备用控制按钮">
+        <button type="button" data-action="left" aria-label="向左换道">左</button>
+        <button type="button" data-action="jump" aria-label="跳跃">跳</button>
+        <button type="button" data-action="slide" aria-label="滑铲">滑</button>
+        <button type="button" data-action="right" aria-label="向右换道">右</button>
+      </nav>
+    </main>
+
+    <noscript>需要启用 JavaScript 才能游玩。</noscript>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
