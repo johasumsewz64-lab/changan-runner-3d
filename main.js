@@ -62,7 +62,7 @@ const smoothstep = (value) => {
 };
 
 const COLLISION_PROFILES = {
-  tank: { halfWidth: 0.9, depth: 1.12 },
+  tank: { halfWidth: 1.04, depth: 1.18 },
   barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
   gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
 };
@@ -500,17 +500,9 @@ function buildPlayer() {
   player.hips = makeBox(0.96, 0.35, 0.55, materials.pants, 0, 1.35, 0, player.bodyPivot);
   player.torso = makeBox(1.05, 1.18, 0.58, materials.white, 0, 2.17, 0.02, player.bodyPivot);
 
-  makeBox(1.18, 0.18, 0.64, materials.white, 0, 2.78, 0.02, player.bodyPivot);
-  makeBox(0.82, 0.16, 0.08, materials.white, 0, 2.72, -0.34, player.bodyPivot);
-  makeBox(0.52, 0.08, 0.09, materials.shirtShade, 0, 2.79, -0.36, player.bodyPivot);
-  const collarLeft = makeBox(0.34, 0.08, 0.06, materials.shirtShade, -0.16, 2.78, 0.34, player.bodyPivot);
-  collarLeft.rotation.z = -0.55;
-  const collarRight = makeBox(0.34, 0.08, 0.06, materials.shirtShade, 0.16, 2.78, 0.34, player.bodyPivot);
-  collarRight.rotation.z = 0.55;
   makeBox(0.16, 0.84, 0.05, materials.tie, 0, 2.28, 0.36, player.bodyPivot);
   makeBox(0.27, 0.24, 0.05, materials.tie, 0, 2.67, 0.37, player.bodyPivot);
   makeBox(0.44, 0.2, 0.055, materials.white, 0.28, 2.34, 0.37, player.bodyPivot);
-  makeBox(0.7, 0.16, 0.06, materials.white, 0, 2.74, -0.35, player.bodyPivot);
 
   for (let i = 0; i < 4; i += 1) {
     makeSphere(0.035, materials.tie, 0.02, 2.45 - i * 0.22, 0.39, player.bodyPivot, 8);
@@ -624,7 +616,7 @@ function createTank(lane, z) {
   }
 
   group.position.set(LANES[lane], 0.03, z);
-  group.scale.setScalar(1.1);
+  group.scale.setScalar(1.24);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
