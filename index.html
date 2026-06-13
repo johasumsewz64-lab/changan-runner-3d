@@ -8,7 +8,7 @@
       content="一个原创低多边形 3D 无尽跑酷网页游戏，支持电脑键盘和手机触控。"
     />
     <title>长安街跑者 - 3D 无尽跑酷</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=rules-2" />
     <script type="importmap">
       {
         "imports": {
@@ -25,6 +25,10 @@
         <div>
           <span class="hud-label">分数</span>
           <strong id="scoreText">0</strong>
+        </div>
+        <div>
+          <span class="hud-label">生命</span>
+          <strong id="healthText" class="health-hearts">♥♥♥</strong>
         </div>
         <div>
           <span class="hud-label">速度</span>
@@ -47,7 +51,7 @@
           <p class="eyebrow">原创低多边形 3D 跑酷</p>
           <h1>长安街跑者</h1>
           <p class="lede">
-            三车道自动奔跑，躲开卡通坦克、跳过路障、滑过门架。镜头、速度线和角色动作会一起制造跑动感。
+            三车道自动奔跑，躲开卡通坦克和炮弹，跳过路障、滑过门架，收集包子回复生命。
           </p>
           <div class="controls-copy">
             <span>电脑：方向键 / 空格</span>
@@ -75,6 +79,6 @@
     </main>
 
     <noscript>需要启用 JavaScript 才能游玩。</noscript>
-    <script type="module" src="main.js"></script>
+    <script type="module" src="main.js?v=rules-2"></script>
   </body>
 </html>

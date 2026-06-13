@@ -2,6 +2,7 @@ import * as THREE from "three";
 
 const canvas = document.getElementById("gameCanvas");
 const scoreText = document.getElementById("scoreText");
+const healthText = document.getElementById("healthText");
 const speedText = document.getElementById("speedText");
 const finalScore = document.getElementById("finalScore");
 const startScreen = document.getElementById("startScreen");
@@ -14,6 +15,10 @@ const touchControls = document.querySelector(".touch-controls");
 const LANES = [-3.2, 0, 3.2];
 const SPAWN_Z = -105;
 const PLAYER_Z = 0;
+const MAX_HEALTH = 3;
+const BUN_COOLDOWN_MIN = 8.5;
+const BUN_COOLDOWN_RANDOM = 5.5;
+const PROJECTILE_FIRE_INTERVAL = 1;
 const OBSTACLE_TYPES = ["tank", "tank", "tank", "barrier", "gate"];
 const LICENSED_MUSIC_URL = "assets/wo-ai-beijing-tiananmen.mp3";
 
@@ -25,6 +30,8 @@ const game = {
   distance: 0,
   speed: 17,
   score: 0,
+  health: MAX_HEALTH,
+  invincibleTimer: 0,
   lane: 1,
   visualLaneX: 0,
   jumpTimer: 0,
@@ -34,7 +41,10 @@ const game = {
   runPhase: 0,
   lastStepBucket: 0,
   obstacles: [],
+  projectiles: [],
+  pickups: [],
   spawnCooldown: 0.5,
+  bunCooldown: BUN_COOLDOWN_MIN,
   flashTimer: 0,
   lastFrame: 0,
 };
@@ -229,8 +239,10 @@ const world = new THREE.Group();
 const roadGroup = new THREE.Group();
 const sceneryGroup = new THREE.Group();
 const obstacleGroup = new THREE.Group();
+const projectileGroup = new THREE.Group();
+const pickupGroup = new THREE.Group();
 const particleGroup = new THREE.Group();
-scene.add(world, roadGroup, sceneryGroup, obstacleGroup, particleGroup);
+scene.add(world, roadGroup, sceneryGroup, obstacleGroup, projectileGroup, pickupGroup, particleGroup);
 
 const materials = {
   skyBlue: new THREE.MeshStandardMaterial({ color: 0x83c9ff, roughness: 1 }),
@@ -254,6 +266,10 @@ const materials = {
   tankLight: new THREE.MeshStandardMaterial({ color: 0xbfd0a9, roughness: 0.78 }),
   tankMetal: new THREE.MeshStandardMaterial({ color: 0x1f2d28, roughness: 0.82 }),
   tankTrim: new THREE.MeshStandardMaterial({ color: 0x7f986e, roughness: 0.84 }),
+  projectile: new THREE.MeshStandardMaterial({ color: 0x373f4d, roughness: 0.62 }),
+  projectileTip: new THREE.MeshStandardMaterial({ color: 0xf0bf45, roughness: 0.5 }),
+  bun: new THREE.MeshStandardMaterial({ color: 0xfff0dd, roughness: 0.84 }),
+  bunFold: new THREE.MeshStandardMaterial({ color: 0xe7c8aa, roughness: 0.88 }),
   barrier: new THREE.MeshStandardMaterial({ color: 0xd74836, roughness: 0.82 }),
   window: new THREE.MeshStandardMaterial({ color: 0xf8d58a, roughness: 0.55 }),
   tree: new THREE.MeshStandardMaterial({ color: 0x23945c, roughness: 0.9 }),
@@ -541,7 +557,7 @@ function buildPlayer() {
   buildLeg(player.leftLeg, player.leftKnee, -1);
   buildLeg(player.rightLeg, player.rightKnee, 1);
 
-  player.root.scale.setScalar(0.96);
+  player.root.scale.setScalar(0.88);
   setMeshShadow(player.root);
   scene.add(player.root);
 }
@@ -571,7 +587,14 @@ function buildLeg(legGroup, kneeGroup, side) {
 
 function createTank(lane, z) {
   const group = new THREE.Group();
-  group.userData = { type: "tank", lane, z, passed: false, wobble: Math.random() * Math.PI * 2 };
+  group.userData = {
+    type: "tank",
+    lane,
+    z,
+    passed: false,
+    wobble: Math.random() * Math.PI * 2,
+    fireCooldown: 0.45 + Math.random() * 0.8,
+  };
 
   makeBox(2.45, 0.62, 1.62, materials.tank, 0, 0.68, 0, group);
   makeBox(2.76, 0.42, 1.86, materials.tankDark, 0, 0.32, 0, group);
@@ -619,6 +642,68 @@ function createTank(lane, z) {
   group.scale.setScalar(1.24);
   setMeshShadow(group);
   obstacleGroup.add(group);
+  return group;
+}
+
+function createProjectile(tank) {
+  const group = new THREE.Group();
+  const tankData = tank.userData;
+  const targetX = player.root.position.x;
+  const startX = tank.position.x;
+  const startZ = tankData.z + 1.65;
+  const travelTime = Math.max(0.55, Math.abs(PLAYER_Z - startZ) / 28);
+  const directionX = clamp((targetX - startX) / travelTime, -3.6, 3.6);
+
+  const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
+  body.rotation.x = Math.PI / 2;
+  const tip = makeCone(0.14, 0.26, materials.projectileTip, 0, 0, 0.43, group);
+  tip.rotation.x = Math.PI / 2;
+  makeSphere(0.06, materials.projectileTip, 0, 0.13, -0.24, group, 8);
+
+  group.position.set(startX, 1.22, startZ);
+  group.rotation.y = Math.atan2(directionX, game.speed + 27);
+  group.userData = {
+    type: "projectile",
+    z: startZ,
+    velocityZ: game.speed + 27,
+    velocityX: directionX,
+    wobble: Math.random() * Math.PI * 2,
+    hit: false,
+  };
+  setMeshShadow(group);
+  projectileGroup.add(group);
+  return group;
+}
+
+function createBun(lane, z = SPAWN_Z) {
+  const group = new THREE.Group();
+  const bunBase = makeSphere(0.36, materials.bun, 0, 0.36, 0, group, 14);
+  bunBase.scale.set(1.12, 0.64, 1.0);
+  makeSphere(0.1, materials.bunFold, 0, 0.62, 0, group, 8);
+
+  for (let i = 0; i < 6; i += 1) {
+    const angle = (Math.PI * 2 * i) / 6;
+    const fold = makeCylinder(0.018, 0.026, 0.32, materials.bunFold, Math.cos(angle) * 0.12, 0.57, Math.sin(angle) * 0.12, group);
+    fold.rotation.z = Math.cos(angle) * 0.45;
+    fold.rotation.x = Math.sin(angle) * 0.45;
+  }
+
+  const steamMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.38 });
+  for (let i = 0; i < 3; i += 1) {
+    const steam = makeSphere(0.055, steamMaterial, (i - 1) * 0.13, 0.86 + i * 0.07, 0, group, 8);
+    steam.castShadow = false;
+    steam.receiveShadow = false;
+  }
+
+  group.position.set(LANES[lane], 0.05, z);
+  group.userData = {
+    type: "bun",
+    lane,
+    z,
+    wobble: Math.random() * Math.PI * 2,
+  };
+  setMeshShadow(group);
+  pickupGroup.add(group);
   return group;
 }
 
@@ -674,9 +759,54 @@ function spawnWave() {
   game.spawnCooldown = lerp(1.12, 0.58, difficulty) + Math.random() * 0.18;
 }
 
+function spawnBunPickup() {
+  if (game.pickups.length > 0) {
+    game.bunCooldown = BUN_COOLDOWN_MIN * 0.65;
+    return;
+  }
+
+  const openLanes = [0, 1, 2].filter(
+    (lane) =>
+      !game.obstacles.some(
+        (obstacle) => obstacle.userData.lane === lane && Math.abs(obstacle.userData.z - SPAWN_Z) < 14,
+      ),
+  );
+  const lane = pick(openLanes.length > 0 ? openLanes : [0, 1, 2]);
+  const bun = createBun(lane, SPAWN_Z - Math.random() * 8);
+  game.pickups.push(bun);
+  game.bunCooldown = BUN_COOLDOWN_MIN + Math.random() * BUN_COOLDOWN_RANDOM;
+}
+
+function removeObstacleAt(index) {
+  const obstacle = game.obstacles[index];
+  if (!obstacle) return;
+  obstacleGroup.remove(obstacle);
+  game.obstacles.splice(index, 1);
+}
+
+function removeProjectileAt(index) {
+  const projectile = game.projectiles[index];
+  if (!projectile) return;
+  projectileGroup.remove(projectile);
+  game.projectiles.splice(index, 1);
+}
+
+function removePickupAt(index) {
+  const pickup = game.pickups[index];
+  if (!pickup) return;
+  pickupGroup.remove(pickup);
+  game.pickups.splice(index, 1);
+}
+
 function resetGame() {
   for (const obstacle of game.obstacles) {
     obstacleGroup.remove(obstacle);
+  }
+  for (const projectile of game.projectiles) {
+    projectileGroup.remove(projectile);
+  }
+  for (const pickup of game.pickups) {
+    pickupGroup.remove(pickup);
   }
 
   game.state = "running";
@@ -684,6 +814,8 @@ function resetGame() {
   game.distance = 0;
   game.speed = 17;
   game.score = 0;
+  game.health = MAX_HEALTH;
+  game.invincibleTimer = 0;
   game.lane = 1;
   game.visualLaneX = 0;
   game.jumpTimer = 0;
@@ -693,8 +825,12 @@ function resetGame() {
   game.runPhase = 0;
   game.lastStepBucket = 0;
   game.obstacles = [];
+  game.projectiles = [];
+  game.pickups = [];
   game.spawnCooldown = 0.5;
+  game.bunCooldown = BUN_COOLDOWN_MIN;
   game.flashTimer = 0;
+  player.root.visible = true;
   startScreen.classList.add("hidden");
   gameOverScreen.classList.add("hidden");
   updateHud();
@@ -704,6 +840,7 @@ function gameOver() {
   if (game.state !== "running") return;
   game.state = "gameover";
   game.flashTimer = 0.42;
+  player.root.visible = true;
   finalScore.textContent = String(game.score);
   window.setTimeout(() => {
     gameOverScreen.classList.remove("hidden");
@@ -712,7 +849,32 @@ function gameOver() {
 
 function updateHud() {
   scoreText.textContent = String(game.score);
+  if (healthText) {
+    healthText.textContent = "♥".repeat(game.health) + "♡".repeat(MAX_HEALTH - game.health);
+  }
   speedText.textContent = `${(game.speed / 17).toFixed(1)}x`;
+}
+
+function damagePlayer() {
+  if (game.state !== "running" || game.invincibleTimer > 0) return false;
+
+  game.health = Math.max(0, game.health - 1);
+  game.invincibleTimer = 1.25;
+  game.flashTimer = 0.36;
+  updateHud();
+
+  if (game.health <= 0) {
+    gameOver();
+  }
+
+  return true;
+}
+
+function healPlayer() {
+  if (game.state !== "running") return;
+  game.health = Math.min(MAX_HEALTH, game.health + 1);
+  game.flashTimer = Math.max(game.flashTimer, 0.16);
+  updateHud();
 }
 
 function moveLane(direction) {
@@ -805,6 +967,8 @@ function updatePlayer(dt) {
     game.lastStepBucket = currentBucket;
     emitDust(player.root.position.x + (currentBucket % 2 === 0 ? -0.28 : 0.28), PLAYER_Z + 0.2);
   }
+
+  player.root.visible = game.state !== "running" || game.invincibleTimer <= 0 || Math.floor(game.time * 16) % 2 === 0;
 }
 
 function updateWorldMotion(dt) {
@@ -856,6 +1020,16 @@ function updateObstacles(dt) {
     obstacle.position.y = 0.02 + Math.sin(game.time * 7 + obstacle.userData.wobble) * 0.025;
     if (obstacle.userData.type === "tank") {
       obstacle.rotation.y = Math.sin(game.time * 3 + obstacle.userData.wobble) * 0.025;
+      obstacle.userData.fireCooldown -= dt;
+      if (
+        obstacle.userData.fireCooldown <= 0 &&
+        obstacle.userData.z > SPAWN_Z + 18 &&
+        obstacle.userData.z < -7 &&
+        game.projectiles.length < 18
+      ) {
+        game.projectiles.push(createProjectile(obstacle));
+        obstacle.userData.fireCooldown = PROJECTILE_FIRE_INTERVAL;
+      }
     }
   }
 
@@ -868,8 +1042,67 @@ function updateObstacles(dt) {
   }
 }
 
+function updateProjectiles(dt) {
+  for (const projectile of game.projectiles) {
+    const data = projectile.userData;
+    data.z += data.velocityZ * dt;
+    projectile.position.z = data.z;
+    projectile.position.x += data.velocityX * dt;
+    projectile.position.y = 1.22 + Math.sin(game.time * 12 + data.wobble) * 0.035;
+    projectile.rotation.z += dt * 8;
+  }
+
+  for (let i = game.projectiles.length - 1; i >= 0; i -= 1) {
+    const projectile = game.projectiles[i];
+    const data = projectile.userData;
+    const slide = game.slideAmount;
+    const playerMinY = player.root.position.y + (slide > 0.55 ? 0.05 : 0.18);
+    const playerMaxY = player.root.position.y + (slide > 0.55 ? 1.04 : 2.68);
+    const xOverlap = Math.abs(projectile.position.x - player.root.position.x) < 0.55;
+    const zOverlap = Math.abs(data.z - PLAYER_Z) < 0.72;
+    const yOverlap = projectile.position.y >= playerMinY && projectile.position.y <= playerMaxY;
+
+    if (xOverlap && zOverlap && yOverlap) {
+      damagePlayer();
+      removeProjectileAt(i);
+      continue;
+    }
+
+    if (data.z > 18 || Math.abs(projectile.position.x) > 8) {
+      removeProjectileAt(i);
+    }
+  }
+}
+
+function updatePickups(dt) {
+  for (const pickup of game.pickups) {
+    pickup.userData.z += game.speed * dt;
+    pickup.position.z = pickup.userData.z;
+    pickup.position.y = 0.05 + Math.sin(game.time * 4.2 + pickup.userData.wobble) * 0.08;
+    pickup.rotation.y += dt * 1.6;
+  }
+
+  for (let i = game.pickups.length - 1; i >= 0; i -= 1) {
+    const pickup = game.pickups[i];
+    const xOverlap = Math.abs(pickup.position.x - player.root.position.x) < 0.8;
+    const zOverlap = Math.abs(pickup.userData.z - PLAYER_Z) < 0.95;
+    const canReach = game.slideAmount < 0.82;
+
+    if (xOverlap && zOverlap && canReach) {
+      healPlayer();
+      removePickupAt(i);
+      continue;
+    }
+
+    if (pickup.userData.z > 18) {
+      removePickupAt(i);
+    }
+  }
+}
+
 function checkCollision() {
-  for (const obstacle of game.obstacles) {
+  for (let i = game.obstacles.length - 1; i >= 0; i -= 1) {
+    const obstacle = game.obstacles[i];
     const data = obstacle.userData;
     const profile = COLLISION_PROFILES[data.type];
     if (!profile) continue;
@@ -882,7 +1115,8 @@ function checkCollision() {
     const clearsBarrier = data.type === "barrier" && game.jumpHeight > profile.jumpClearHeight;
     const clearsGate = data.type === "gate" && game.slideAmount > profile.slideClearAmount;
     if (!clearsBarrier && !clearsGate) {
-      gameOver();
+      damagePlayer();
+      removeObstacleAt(i);
       return;
     }
   }
@@ -910,11 +1144,17 @@ function update(dt) {
     game.distance += game.speed * dt;
     game.speed = Math.min(31, 17 + game.distance / 150);
     game.score = Math.floor(game.distance * 7.5);
+    game.invincibleTimer = Math.max(0, game.invincibleTimer - dt);
 
     game.spawnCooldown -= dt;
     if (game.spawnCooldown <= 0) spawnWave();
 
+    game.bunCooldown -= dt;
+    if (game.bunCooldown <= 0) spawnBunPickup();
+
     updateObstacles(dt);
+    updateProjectiles(dt);
+    updatePickups(dt);
     checkCollision();
     updateHud();
   }

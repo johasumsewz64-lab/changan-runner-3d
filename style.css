@@ -81,6 +81,12 @@ button {
   line-height: 1;
 }
 
+.health-hearts {
+  color: #d01f1f;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0.08em;
+}
+
 .music-toggle {
   position: fixed;
   top: max(88px, calc(env(safe-area-inset-top) + 88px));
