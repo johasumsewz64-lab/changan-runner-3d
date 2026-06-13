@@ -56,6 +56,16 @@ const music = {
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, t) => a + (b - a) * t;
 const pick = (items) => items[Math.floor(Math.random() * items.length)];
+const smoothstep = (value) => {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+const COLLISION_PROFILES = {
+  tank: { halfWidth: 0.9, depth: 1.12 },
+  barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
+  gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
+};
 
 function updateMusicButton() {
   musicButton.textContent = music.enabled ? "音乐：开" : "音乐：关";
@@ -470,6 +480,7 @@ const player = {
   torso: null,
   hips: null,
   head: null,
+  neck: null,
   leftArm: new THREE.Group(),
   rightArm: new THREE.Group(),
   leftLeg: new THREE.Group(),
@@ -490,6 +501,8 @@ function buildPlayer() {
   player.torso = makeBox(1.05, 1.18, 0.58, materials.white, 0, 2.17, 0.02, player.bodyPivot);
 
   makeBox(1.18, 0.18, 0.64, materials.white, 0, 2.78, 0.02, player.bodyPivot);
+  makeBox(0.82, 0.16, 0.08, materials.white, 0, 2.72, -0.34, player.bodyPivot);
+  makeBox(0.52, 0.08, 0.09, materials.shirtShade, 0, 2.79, -0.36, player.bodyPivot);
   const collarLeft = makeBox(0.34, 0.08, 0.06, materials.shirtShade, -0.16, 2.78, 0.34, player.bodyPivot);
   collarLeft.rotation.z = -0.55;
   const collarRight = makeBox(0.34, 0.08, 0.06, materials.shirtShade, 0.16, 2.78, 0.34, player.bodyPivot);
@@ -506,14 +519,18 @@ function buildPlayer() {
   makeBox(1.02, 0.12, 0.64, materials.belt, 0, 1.55, 0.03, player.bodyPivot);
   makeBox(0.22, 0.16, 0.07, materials.gold, 0, 1.55, 0.39, player.bodyPivot);
 
+  player.neck = makeCylinder(0.14, 0.16, 0.34, materials.skin, 0, 2.8, 0.0, player.bodyPivot);
   player.head = makeSphere(0.34, materials.skin, 0, 3.04, 0.05, player.bodyPivot, 16);
   player.head.scale.y = 1.08;
-  const hairCap = makeSphere(0.35, materials.hair, 0, 3.25, 0.0, player.bodyPivot, 12);
-  hairCap.scale.set(1.05, 0.58, 1.0);
+  const hairCap = makeSphere(0.36, materials.hair, 0, 3.24, -0.01, player.bodyPivot, 16);
+  hairCap.scale.set(1.05, 0.66, 1.02);
   makeBox(0.52, 0.15, 0.15, materials.hair, 0, 3.25, 0.25, player.bodyPivot);
-  makeBox(0.56, 0.2, 0.22, materials.hair, 0, 3.17, -0.27, player.bodyPivot);
-  makeSphere(0.12, materials.hair, -0.2, 3.12, -0.28, player.bodyPivot, 8);
-  makeSphere(0.12, materials.hair, 0.2, 3.12, -0.28, player.bodyPivot, 8);
+  const backHair = makeSphere(0.26, materials.hair, 0, 3.12, -0.24, player.bodyPivot, 12);
+  backHair.scale.set(1.25, 0.9, 0.72);
+  makeSphere(0.08, materials.hair, -0.28, 3.12, -0.1, player.bodyPivot, 8);
+  makeSphere(0.08, materials.hair, 0.28, 3.12, -0.1, player.bodyPivot, 8);
+  makeSphere(0.07, materials.skin, -0.34, 3.04, -0.02, player.bodyPivot, 8);
+  makeSphere(0.07, materials.skin, 0.34, 3.04, -0.02, player.bodyPivot, 8);
   makeSphere(0.036, materials.hair, -0.13, 3.07, 0.36, player.bodyPivot, 8);
   makeSphere(0.036, materials.hair, 0.13, 3.07, 0.36, player.bodyPivot, 8);
   makeBox(0.12, 0.035, 0.03, materials.hair, -0.13, 3.18, 0.37, player.bodyPivot);
@@ -607,7 +624,7 @@ function createTank(lane, z) {
   }
 
   group.position.set(LANES[lane], 0.03, z);
-  group.scale.setScalar(1.34);
+  group.scale.setScalar(1.1);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
@@ -718,7 +735,7 @@ function jump() {
 
 function slide() {
   if (game.state !== "running" || game.jumpTimer > 0 || game.slideTimer > 0) return;
-  game.slideTimer = 0.62;
+  game.slideTimer = 0.72;
 }
 
 function handleAction(action) {
@@ -752,8 +769,10 @@ function updatePlayer(dt) {
 
   if (game.slideTimer > 0) {
     game.slideTimer = Math.max(0, game.slideTimer - dt);
-    const progress = 1 - game.slideTimer / 0.62;
-    game.slideAmount = Math.sin(progress * Math.PI);
+    const progress = 1 - game.slideTimer / 0.72;
+    const enter = smoothstep(progress / 0.18);
+    const exit = 1 - smoothstep((progress - 0.72) / 0.28);
+    game.slideAmount = Math.min(enter, exit);
   } else {
     game.slideAmount = 0;
   }
@@ -767,24 +786,25 @@ function updatePlayer(dt) {
   const counterRun = Math.sin(game.runPhase + Math.PI);
   const bob = running ? Math.abs(Math.sin(game.runPhase * 2)) * 0.13 : 0;
   const slide = game.slideAmount;
+  const activeBob = bob * (1 - slide * 0.85);
 
   player.root.position.x = game.visualLaneX;
-  player.root.position.y = game.jumpHeight + bob - slide * 0.25;
+  player.root.position.y = game.jumpHeight + activeBob - slide * 0.18;
   player.root.rotation.z = clamp((targetLaneX - game.visualLaneX) * -0.08, -0.16, 0.16);
-  player.bodyPivot.rotation.x = slide * 1.18;
-  player.bodyPivot.position.y = -slide * 0.82;
-  player.bodyPivot.scale.y = 1 - slide * 0.28;
-  player.bodyPivot.position.z = slide * 0.38;
+  player.bodyPivot.rotation.x = slide * 0.68;
+  player.bodyPivot.position.y = -slide * 0.48;
+  player.bodyPivot.scale.y = 1 - slide * 0.08;
+  player.bodyPivot.position.z = slide * 0.16;
 
   const legSwing = 0.72 * (1 - slide);
-  player.leftLeg.rotation.x = run * legSwing;
-  player.rightLeg.rotation.x = counterRun * legSwing;
-  player.leftKnee.rotation.x = Math.max(0, -run) * 0.92 * (1 - slide);
-  player.rightKnee.rotation.x = Math.max(0, -counterRun) * 0.92 * (1 - slide);
-  player.leftArm.rotation.x = counterRun * 0.82 * (1 - slide);
-  player.rightArm.rotation.x = run * 0.82 * (1 - slide);
-  player.leftArm.rotation.z = -0.18 - Math.abs(run) * 0.08;
-  player.rightArm.rotation.z = 0.18 + Math.abs(run) * 0.08;
+  player.leftLeg.rotation.x = run * legSwing + slide * 0.58;
+  player.rightLeg.rotation.x = counterRun * legSwing + slide * 0.18;
+  player.leftKnee.rotation.x = Math.max(0, -run) * 0.92 * (1 - slide) + slide * 0.86;
+  player.rightKnee.rotation.x = Math.max(0, -counterRun) * 0.92 * (1 - slide) + slide * 0.52;
+  player.leftArm.rotation.x = counterRun * 0.82 * (1 - slide) - slide * 0.34;
+  player.rightArm.rotation.x = run * 0.82 * (1 - slide) - slide * 0.42;
+  player.leftArm.rotation.z = -0.18 - Math.abs(run) * 0.08 - slide * 0.08;
+  player.rightArm.rotation.z = 0.18 + Math.abs(run) * 0.08 + slide * 0.08;
   player.head.rotation.y = Math.sin(game.runPhase * 0.5) * 0.06;
   player.head.rotation.x = -slide * 0.18;
 
@@ -859,11 +879,16 @@ function updateObstacles(dt) {
 function checkCollision() {
   for (const obstacle of game.obstacles) {
     const data = obstacle.userData;
-    if (data.lane !== game.lane) continue;
-    if (Math.abs(data.z - PLAYER_Z) > 1.25) continue;
+    const profile = COLLISION_PROFILES[data.type];
+    if (!profile) continue;
 
-    const clearsBarrier = data.type === "barrier" && game.jumpHeight > 1.15;
-    const clearsGate = data.type === "gate" && game.slideAmount > 0.58;
+    const playerHalfWidth = game.slideAmount > 0.45 ? 0.56 : 0.42;
+    const xOverlap = Math.abs(player.root.position.x - obstacle.position.x) < profile.halfWidth + playerHalfWidth;
+    const zOverlap = Math.abs(data.z - PLAYER_Z) < profile.depth;
+    if (!xOverlap || !zOverlap) continue;
+
+    const clearsBarrier = data.type === "barrier" && game.jumpHeight > profile.jumpClearHeight;
+    const clearsGate = data.type === "gate" && game.slideAmount > profile.slideClearAmount;
     if (!clearsBarrier && !clearsGate) {
       gameOver();
       return;
