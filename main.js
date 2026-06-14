@@ -513,9 +513,10 @@ function createBuilding(side, index) {
     }
   }
 
-  group.position.x = side * (8.2 + (index % 4) * 1.25);
-  group.userData.baseZ = -112 + index * 9.7;
-  group.userData.speedFactor = 0.72;
+  group.position.x = side * (9.4 + (index % 2) * 1.25);
+  group.userData.baseZ = -160 + index * 20;
+  group.userData.speedFactor = 0.76;
+  group.userData.span = 180;
   group.scale.setScalar(0.92 + (index % 5) * 0.06);
   setMeshShadow(group);
   sceneryGroup.add(group);
@@ -528,9 +529,10 @@ function createTree(side, index) {
   makeSphere(0.8, materials.tree, 0, 1.7, 0, group, 9);
   makeSphere(0.55, materials.tree, 0.42, 1.52, 0.18, group, 8);
   makeSphere(0.5, materials.tree, -0.38, 1.48, -0.08, group, 8);
-  group.position.x = side * 6.9;
-  group.userData.baseZ = -108 + index * 8.6;
+  group.position.x = side * 6.25;
+  group.userData.baseZ = -170 + index * 9.2;
   group.userData.speedFactor = 0.88;
+  group.userData.span = 180;
   sceneryGroup.add(group);
   sceneryItems.push(group);
 }
@@ -543,9 +545,10 @@ function createLamp(side, index) {
   const lantern = makeBox(0.38, 0.48, 0.38, materials.red, side * -0.82, 2.72, 0, group);
   lantern.castShadow = false;
   makeBox(0.42, 0.08, 0.42, materials.gold, side * -0.82, 2.98, 0, group);
-  group.position.x = side * 6.05;
-  group.userData.baseZ = -110 + index * 11.2;
+  group.position.x = side * 5.45;
+  group.userData.baseZ = -168 + index * 12.5;
   group.userData.speedFactor = 0.98;
+  group.userData.span = 180;
   sceneryGroup.add(group);
   sceneryItems.push(group);
 }
@@ -677,16 +680,17 @@ function randomLandmarkType(excludedType = "") {
 
 function createLandmark(side, index) {
   const group = new THREE.Group();
-  group.position.x = side * (8.15 + (index % 2) * 1.05);
+  group.position.x = side * (13.0 + (index % 2) * 0.95);
   group.userData = {
-    baseZ: -126 + index * 19,
-    speedFactor: 0.7,
+    baseZ: -176 + index * 30,
+    speedFactor: 0.76,
+    span: 180,
     isLandmark: true,
     side,
     lastZ: null,
     landmarkType: "",
   };
-  group.scale.setScalar(0.9 + (index % 3) * 0.08);
+  group.scale.setScalar(0.92 + (index % 3) * 0.08);
   buildLandmarkModel(group, randomLandmarkType());
   sceneryGroup.add(group);
   sceneryItems.push(group);
@@ -694,19 +698,19 @@ function createLandmark(side, index) {
 
 function buildScenery() {
   createBackdropGate();
-  for (let i = 0; i < 18; i += 1) {
+  for (let i = 0; i < 9; i += 1) {
     createBuilding(-1, i);
     createBuilding(1, i + 4);
   }
-  for (let i = 0; i < 22; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     createTree(-1, i);
     createTree(1, i + 7);
   }
-  for (let i = 0; i < 16; i += 1) {
+  for (let i = 0; i < 13; i += 1) {
     createLamp(-1, i);
     createLamp(1, i + 3);
   }
-  for (let i = 0; i < 10; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     createLandmark(i % 2 === 0 ? -1 : 1, i);
   }
 }
@@ -1407,10 +1411,10 @@ function updateWorldMotion(dt) {
   }
 
   for (const item of sceneryItems) {
-    const span = 145;
+    const span = item.userData.span || 180;
     let z = item.userData.baseZ + (game.distance * item.userData.speedFactor) % span;
     if (z > 22) z -= span;
-    if (item.userData.isLandmark && item.userData.lastZ !== null && z < item.userData.lastZ - 70) {
+    if (item.userData.isLandmark && item.userData.lastZ !== null && z < item.userData.lastZ - span * 0.45) {
       buildLandmarkModel(item, randomLandmarkType(item.userData.landmarkType));
     }
     item.position.z = z;
