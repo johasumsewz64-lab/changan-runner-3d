@@ -853,10 +853,10 @@ function createTank(lane, z) {
 
   makeBox(1.82, 0.7, 2.78, materials.tank, 0, 0.72, -0.08, group);
   makeBox(1.96, 0.18, 2.68, materials.tankTrim, 0, 1.12, -0.16, group);
-  makeBox(2.42, 0.92, 0.3, materials.tankTrim, 0, 0.78, 1.48, group);
-  makeBox(2.12, 0.54, 0.12, materials.tank, 0, 0.84, 1.68, group);
-  makeBox(2.46, 0.3, 0.24, materials.tankDark, 0, 0.28, 1.58, group);
-  makeBox(1.34, 0.34, 0.08, materials.tankDark, 0, 0.5, 1.78, group);
+  makeBox(2.18, 0.96, 0.34, materials.tankTrim, 0, 0.8, 1.5, group);
+  makeBox(1.8, 0.56, 0.14, materials.tank, 0, 0.86, 1.72, group);
+  makeBox(2.26, 0.26, 0.24, materials.tankDark, 0, 0.24, 1.6, group);
+  makeBox(1.48, 0.34, 0.08, materials.tankDark, 0, 0.52, 1.82, group);
   makeBox(1.1, 0.54, 0.98, materials.tank, 0, 1.24, 0.18, group);
   makeBox(0.76, 0.18, 0.66, materials.tankTrim, 0, 1.58, 0.2, group);
   const hatch = makeCylinder(0.28, 0.32, 0.16, materials.tankDark, -0.18, 1.7, 0.12, group);
@@ -866,28 +866,23 @@ function createTank(lane, z) {
   const muzzle = makeCylinder(0.18, 0.18, 0.24, materials.tankMetal, 0, 1.28, 2.42, group);
   muzzle.rotation.x = Math.PI / 2;
 
-  for (const sideX of [-1.12, 1.12]) {
-    makeBox(0.32, 0.5, 2.36, materials.tankDark, sideX, 0.34, -0.24, group);
-    makeBox(0.36, 0.16, 2.12, materials.tankMetal, sideX, 0.62, -0.28, group);
-    for (const treadZ of [-1.2, -0.78, -0.36, 0.06, 0.48, 0.9]) {
-      makeBox(0.18, 0.14, 0.18, materials.tankMetal, sideX, 0.11, treadZ, group);
-    }
-  }
-
-  for (const sideX of [-1.26, 1.26]) {
-    for (const wheelZ of [-1.12, -0.66, -0.2, 0.26, 0.72]) {
-      const wheel = makeCylinder(0.2, 0.2, 0.1, materials.tankLight, sideX, 0.34, wheelZ, group);
-      wheel.rotation.z = Math.PI / 2;
-      const hub = makeCylinder(0.08, 0.08, 0.12, materials.tankMetal, sideX, 0.34, wheelZ, group);
-      hub.rotation.z = Math.PI / 2;
+  for (const sideX of [-0.88, 0.88]) {
+    makeBox(0.32, 0.52, 1.92, materials.tankDark, sideX, 0.34, -0.48, group);
+    makeBox(0.36, 0.18, 1.7, materials.tankMetal, sideX, 0.64, -0.52, group);
+    makeBox(0.28, 0.22, 0.12, materials.tankMetal, sideX, 0.26, 1.52, group);
+    for (const treadX of [-0.06, 0.06]) {
+      const frontWheel = makeCylinder(0.115, 0.115, 0.08, materials.tankLight, sideX + treadX, 0.32, 1.6, group);
+      frontWheel.rotation.x = Math.PI / 2;
+      const hub = makeCylinder(0.045, 0.045, 0.09, materials.tankMetal, sideX + treadX, 0.32, 1.65, group);
+      hub.rotation.x = Math.PI / 2;
     }
   }
 
   const star = makeCone(0.2, 0.08, materials.gold, 0, 0.9, 1.86, group);
   star.rotation.x = -Math.PI / 2;
   star.rotation.z = Math.PI / 4;
-  makeSphere(0.09, materials.window, -0.58, 0.72, 1.84, group, 8);
-  makeSphere(0.09, materials.window, 0.58, 0.72, 1.84, group, 8);
+  makeSphere(0.1, materials.window, -0.72, 0.74, 1.86, group, 8);
+  makeSphere(0.1, materials.window, 0.72, 0.74, 1.86, group, 8);
   makeBox(0.16, 0.42, 0.08, materials.tankMetal, -0.72, 1.62, -0.24, group).rotation.z = -0.28;
 
   for (const boltX of [-0.72, -0.36, 0, 0.36, 0.72]) {
@@ -896,7 +891,7 @@ function createTank(lane, z) {
 
   group.position.set(LANES[lane], 0.03, z);
   group.rotation.y = 0;
-  group.scale.set(1.75, 2.32, 2.62);
+  group.scale.set(1.48, 2.28, 2.56);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
