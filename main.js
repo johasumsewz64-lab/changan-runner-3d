@@ -81,7 +81,7 @@ const smoothstep = (value) => {
 };
 
 const COLLISION_PROFILES = {
-  tank: { halfWidth: 1.34, depth: 1.62 },
+  tank: { halfWidth: 1.62, depth: 2.08 },
   barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
   gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
 };
@@ -793,7 +793,7 @@ function buildPlayer() {
   buildLeg(player.rightLeg, player.rightKnee, 1);
   buildShoulderRocketLauncher();
 
-  player.root.scale.setScalar(0.72);
+  player.root.scale.setScalar(0.68);
   setMeshShadow(player.root);
   scene.add(player.root);
 }
@@ -851,51 +851,50 @@ function createTank(lane, z) {
     fireCooldown: 0,
   };
 
-  makeBox(2.45, 0.62, 1.62, materials.tank, 0, 0.68, 0, group);
-  makeBox(2.76, 0.42, 1.86, materials.tankDark, 0, 0.32, 0, group);
-  makeBox(2.25, 0.18, 1.72, materials.tankTrim, 0, 0.99, 0, group);
-  makeBox(1.08, 0.52, 0.98, materials.tank, 0.08, 1.18, 0.04, group);
-  makeBox(0.72, 0.18, 0.62, materials.tankTrim, 0.08, 1.52, 0.04, group);
-  const hatch = makeCylinder(0.28, 0.32, 0.16, materials.tankDark, -0.22, 1.62, 0.03, group);
+  makeBox(1.82, 0.7, 2.78, materials.tank, 0, 0.72, 0, group);
+  makeBox(1.96, 0.18, 2.92, materials.tankTrim, 0, 1.12, -0.02, group);
+  makeBox(1.82, 0.72, 0.22, materials.tankTrim, 0, 0.76, 1.48, group);
+  makeBox(1.28, 0.34, 0.18, materials.tankDark, 0, 0.48, 1.64, group);
+  makeBox(1.1, 0.54, 0.98, materials.tank, 0, 1.24, 0.18, group);
+  makeBox(0.76, 0.18, 0.66, materials.tankTrim, 0, 1.58, 0.2, group);
+  const hatch = makeCylinder(0.28, 0.32, 0.16, materials.tankDark, -0.18, 1.7, 0.12, group);
   hatch.rotation.y = Math.PI / 5;
-  const cannon = makeCylinder(0.11, 0.14, 1.58, materials.tankDark, 0.1, 1.2, 1.05, group);
+  const cannon = makeCylinder(0.12, 0.15, 1.76, materials.tankDark, 0, 1.28, 1.28, group);
   cannon.rotation.x = Math.PI / 2;
-  const muzzle = makeCylinder(0.16, 0.16, 0.2, materials.tankMetal, 0.1, 1.2, 1.92, group);
+  const muzzle = makeCylinder(0.18, 0.18, 0.22, materials.tankMetal, 0, 1.28, 2.24, group);
   muzzle.rotation.x = Math.PI / 2;
 
-  for (const sideZ of [-1.02, 1.02]) {
-    makeBox(2.62, 0.18, 0.12, materials.tankMetal, 0, 0.54, sideZ, group);
-    for (const treadX of [-1.08, -0.72, -0.36, 0, 0.36, 0.72, 1.08]) {
-      makeBox(0.18, 0.16, 0.18, materials.tankDark, treadX, 0.16, sideZ, group);
+  for (const sideX of [-1.12, 1.12]) {
+    makeBox(0.32, 0.5, 2.96, materials.tankDark, sideX, 0.34, 0, group);
+    makeBox(0.36, 0.16, 2.76, materials.tankMetal, sideX, 0.62, 0, group);
+    for (const treadZ of [-1.18, -0.74, -0.3, 0.14, 0.58, 1.02, 1.34]) {
+      makeBox(0.18, 0.14, 0.18, materials.tankMetal, sideX, 0.11, treadZ, group);
     }
   }
 
-  for (const sideX of [-0.96, -0.56, -0.16, 0.24, 0.64, 1.04]) {
-    const wheelL = makeCylinder(0.19, 0.19, 0.09, materials.tankLight, sideX, 0.3, 0.98, group);
-    wheelL.rotation.x = Math.PI / 2;
-    const hubL = makeCylinder(0.08, 0.08, 0.1, materials.tankMetal, sideX, 0.3, 1.04, group);
-    hubL.rotation.x = Math.PI / 2;
-    const wheelR = makeCylinder(0.19, 0.19, 0.09, materials.tankLight, sideX, 0.3, -0.98, group);
-    wheelR.rotation.x = Math.PI / 2;
-    const hubR = makeCylinder(0.08, 0.08, 0.1, materials.tankMetal, sideX, 0.3, -1.04, group);
-    hubR.rotation.x = Math.PI / 2;
+  for (const sideX of [-1.26, 1.26]) {
+    for (const wheelZ of [-1.12, -0.66, -0.2, 0.26, 0.72, 1.18]) {
+      const wheel = makeCylinder(0.2, 0.2, 0.1, materials.tankLight, sideX, 0.34, wheelZ, group);
+      wheel.rotation.z = Math.PI / 2;
+      const hub = makeCylinder(0.08, 0.08, 0.12, materials.tankMetal, sideX, 0.34, wheelZ, group);
+      hub.rotation.z = Math.PI / 2;
+    }
   }
 
-  const star = makeCone(0.18, 0.08, materials.gold, -0.42, 0.9, 0.75, group);
-  star.rotation.x = Math.PI / 2;
+  const star = makeCone(0.19, 0.08, materials.gold, 0, 0.88, 1.72, group);
+  star.rotation.x = -Math.PI / 2;
   star.rotation.z = Math.PI / 4;
-  makeSphere(0.08, materials.window, 0.78, 0.9, 0.83, group, 8);
-  makeSphere(0.08, materials.window, 1.03, 0.9, 0.83, group, 8);
-  makeBox(0.12, 0.44, 0.08, materials.tankMetal, -0.82, 1.58, -0.34, group).rotation.z = -0.28;
+  makeSphere(0.08, materials.window, -0.54, 0.72, 1.7, group, 8);
+  makeSphere(0.08, materials.window, 0.54, 0.72, 1.7, group, 8);
+  makeBox(0.16, 0.42, 0.08, materials.tankMetal, -0.72, 1.62, -0.24, group).rotation.z = -0.28;
 
-  for (const boltX of [-0.92, -0.46, 0, 0.46, 0.92]) {
-    makeSphere(0.045, materials.tankDark, boltX, 0.84, 0.86, group, 8);
-    makeSphere(0.045, materials.tankDark, boltX, 0.84, -0.86, group, 8);
+  for (const boltX of [-0.72, -0.36, 0, 0.36, 0.72]) {
+    makeSphere(0.045, materials.tankDark, boltX, 0.98, 1.58, group, 8);
   }
 
   group.position.set(LANES[lane], 0.03, z);
   group.rotation.y = 0;
-  group.scale.setScalar(1.95);
+  group.scale.setScalar(2.38);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
@@ -905,8 +904,8 @@ function createProjectile(tank) {
   const group = new THREE.Group();
   const tankData = tank.userData;
   const startX = tank.position.x;
-  const startZ = tankData.z + 1.9 * tank.scale.z;
-  const startY = 1.2 * tank.scale.y;
+  const startZ = tankData.z + 2.28 * tank.scale.z;
+  const startY = 1.28 * tank.scale.y;
 
   const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
   body.rotation.x = Math.PI / 2;
