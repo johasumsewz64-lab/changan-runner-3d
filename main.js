@@ -81,7 +81,7 @@ const smoothstep = (value) => {
 };
 
 const COLLISION_PROFILES = {
-  tank: { halfWidth: 1.04, depth: 1.18 },
+  tank: { halfWidth: 1.34, depth: 1.62 },
   barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
   gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
 };
@@ -793,7 +793,7 @@ function buildPlayer() {
   buildLeg(player.rightLeg, player.rightKnee, 1);
   buildShoulderRocketLauncher();
 
-  player.root.scale.setScalar(0.88);
+  player.root.scale.setScalar(0.72);
   setMeshShadow(player.root);
   scene.add(player.root);
 }
@@ -894,7 +894,8 @@ function createTank(lane, z) {
   }
 
   group.position.set(LANES[lane], 0.03, z);
-  group.scale.setScalar(1.24);
+  group.rotation.y = 0;
+  group.scale.setScalar(1.95);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
@@ -904,7 +905,8 @@ function createProjectile(tank) {
   const group = new THREE.Group();
   const tankData = tank.userData;
   const startX = tank.position.x;
-  const startZ = tankData.z + 1.65;
+  const startZ = tankData.z + 1.9 * tank.scale.z;
+  const startY = 1.2 * tank.scale.y;
 
   const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
   body.rotation.x = Math.PI / 2;
@@ -912,11 +914,12 @@ function createProjectile(tank) {
   tip.rotation.x = Math.PI / 2;
   makeSphere(0.06, materials.projectileTip, 0, 0.13, -0.24, group, 8);
 
-  group.position.set(startX, 1.22, startZ);
+  group.position.set(startX, startY, startZ);
   group.userData = {
     type: "projectile",
     lane: tankData.lane,
     z: startZ,
+    y: startY,
     velocityZ: game.speed + 27,
     velocityX: 0,
     wobble: Math.random() * Math.PI * 2,
@@ -1445,7 +1448,7 @@ function updateObstacles(dt) {
     obstacle.position.z = obstacle.userData.z;
     obstacle.position.y = 0.02 + Math.sin(game.time * 7 + obstacle.userData.wobble) * 0.025;
     if (obstacle.userData.type === "tank") {
-      obstacle.rotation.y = Math.sin(game.time * 3 + obstacle.userData.wobble) * 0.025;
+      obstacle.rotation.y = 0;
       obstacle.userData.fireCooldown -= dt;
       if (
         obstacle.userData.fireCooldown <= 0 &&
@@ -1559,7 +1562,7 @@ function updateProjectiles(dt) {
     data.z += data.velocityZ * dt;
     projectile.position.z = data.z;
     projectile.position.x += data.velocityX * dt;
-    projectile.position.y = 1.22 + Math.sin(game.time * 12 + data.wobble) * 0.035;
+    projectile.position.y = data.y + Math.sin(game.time * 12 + data.wobble) * 0.035;
     projectile.rotation.z += dt * 8;
   }
 
