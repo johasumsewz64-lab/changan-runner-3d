@@ -16,9 +16,12 @@ const LANES = [-3.2, 0, 3.2];
 const SPAWN_Z = -105;
 const PLAYER_Z = 0;
 const MAX_HEALTH = 3;
-const BUN_COOLDOWN_MIN = 8.5;
-const BUN_COOLDOWN_RANDOM = 5.5;
-const PROJECTILE_FIRE_INTERVAL = 1;
+const PICKUP_COOLDOWN_MIN = 8.5;
+const PICKUP_COOLDOWN_RANDOM = 5.5;
+const ROCKET_PICKUP_CHANCE = 0.38;
+const PROJECTILE_FIRE_INTERVAL = 10;
+const ROCKET_CHARGE_DURATION = 8;
+const LANDMARK_TYPES = ["tiananmen", "xinhuamen", "tiantan", "monument", "cctv"];
 const OBSTACLE_TYPES = ["tank", "tank", "tank", "barrier", "gate"];
 const LICENSED_MUSIC_URL = "assets/wo-ai-beijing-tiananmen.mp3";
 
@@ -42,9 +45,15 @@ const game = {
   lastStepBucket: 0,
   obstacles: [],
   projectiles: [],
+  rockets: [],
   pickups: [],
+  explosions: [],
   spawnCooldown: 0.5,
-  bunCooldown: BUN_COOLDOWN_MIN,
+  pickupCooldown: PICKUP_COOLDOWN_MIN,
+  tankFireCooldown: PROJECTILE_FIRE_INTERVAL,
+  rocketAmmo: 0,
+  rocketEquipTimer: 0,
+  rocketFireCooldown: 0,
   flashTimer: 0,
   lastFrame: 0,
 };
@@ -240,9 +249,11 @@ const roadGroup = new THREE.Group();
 const sceneryGroup = new THREE.Group();
 const obstacleGroup = new THREE.Group();
 const projectileGroup = new THREE.Group();
+const rocketGroup = new THREE.Group();
 const pickupGroup = new THREE.Group();
+const explosionGroup = new THREE.Group();
 const particleGroup = new THREE.Group();
-scene.add(world, roadGroup, sceneryGroup, obstacleGroup, projectileGroup, pickupGroup, particleGroup);
+scene.add(world, roadGroup, sceneryGroup, obstacleGroup, projectileGroup, rocketGroup, pickupGroup, explosionGroup, particleGroup);
 
 const materials = {
   skyBlue: new THREE.MeshStandardMaterial({ color: 0x83c9ff, roughness: 1 }),
@@ -261,6 +272,12 @@ const materials = {
   gold: new THREE.MeshStandardMaterial({ color: 0xf0bf45, roughness: 0.56 }),
   red: new THREE.MeshStandardMaterial({ color: 0xb72b2b, roughness: 0.78 }),
   deepRed: new THREE.MeshStandardMaterial({ color: 0x7c1d1d, roughness: 0.82 }),
+  stone: new THREE.MeshStandardMaterial({ color: 0xd8d0bd, roughness: 0.86 }),
+  marble: new THREE.MeshStandardMaterial({ color: 0xf4efe2, roughness: 0.74 }),
+  whiteWall: new THREE.MeshStandardMaterial({ color: 0xf7f0df, roughness: 0.82 }),
+  templeBlue: new THREE.MeshStandardMaterial({ color: 0x2468a8, roughness: 0.7 }),
+  glassBlue: new THREE.MeshStandardMaterial({ color: 0x5aa4c8, roughness: 0.42, metalness: 0.12 }),
+  darkGlass: new THREE.MeshStandardMaterial({ color: 0x263d52, roughness: 0.35, metalness: 0.18 }),
   tank: new THREE.MeshStandardMaterial({ color: 0x546e4f, roughness: 0.9 }),
   tankDark: new THREE.MeshStandardMaterial({ color: 0x263a2e, roughness: 0.92 }),
   tankLight: new THREE.MeshStandardMaterial({ color: 0xbfd0a9, roughness: 0.78 }),
@@ -268,8 +285,13 @@ const materials = {
   tankTrim: new THREE.MeshStandardMaterial({ color: 0x7f986e, roughness: 0.84 }),
   projectile: new THREE.MeshStandardMaterial({ color: 0x373f4d, roughness: 0.62 }),
   projectileTip: new THREE.MeshStandardMaterial({ color: 0xf0bf45, roughness: 0.5 }),
+  rocketTube: new THREE.MeshStandardMaterial({ color: 0x2d3b35, roughness: 0.72 }),
+  rocketBand: new THREE.MeshStandardMaterial({ color: 0xd9b445, roughness: 0.58 }),
+  rocketBody: new THREE.MeshStandardMaterial({ color: 0xeff3ee, roughness: 0.55 }),
+  rocketTip: new THREE.MeshStandardMaterial({ color: 0xd84632, roughness: 0.58 }),
   bun: new THREE.MeshStandardMaterial({ color: 0xfff0dd, roughness: 0.84 }),
   bunFold: new THREE.MeshStandardMaterial({ color: 0xe7c8aa, roughness: 0.88 }),
+  powerupGlow: new THREE.MeshBasicMaterial({ color: 0xfff0a8, transparent: true, opacity: 0.46 }),
   barrier: new THREE.MeshStandardMaterial({ color: 0xd74836, roughness: 0.82 }),
   window: new THREE.MeshStandardMaterial({ color: 0xf8d58a, roughness: 0.55 }),
   tree: new THREE.MeshStandardMaterial({ color: 0x23945c, roughness: 0.9 }),
@@ -325,6 +347,15 @@ function makeCone(radius, height, material, x = 0, y = 0, z = 0, parent = null) 
   return mesh;
 }
 
+function makeRoundCone(radius, height, material, x = 0, y = 0, z = 0, parent = null, segments = 18) {
+  const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, height, segments), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  if (parent) parent.add(mesh);
+  return mesh;
+}
+
 function setMeshShadow(object, cast = true, receive = true) {
   object.traverse((child) => {
     if (child.isMesh) {
@@ -332,6 +363,61 @@ function setMeshShadow(object, cast = true, receive = true) {
       child.receiveShadow = receive;
     }
   });
+}
+
+function disposeObject(object) {
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    child.geometry?.dispose();
+    const materialsToDispose = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materialsToDispose) {
+      if (material?.map) {
+        material.map.dispose();
+        material.dispose();
+      }
+    }
+  });
+}
+
+function clearGroup(group) {
+  while (group.children.length > 0) {
+    const child = group.children[0];
+    group.remove(child);
+    disposeObject(child);
+  }
+}
+
+function createLabelPlane(text, width, height, x, y, z, parent, options = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 384;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  const background = options.background ?? "#7c1d1d";
+  const foreground = options.foreground ?? "#f7d87a";
+  context.fillStyle = background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = foreground;
+  context.lineWidth = 10;
+  context.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+  context.fillStyle = foreground;
+  context.font = `bold ${options.fontSize ?? 48}px Microsoft YaHei, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  if (parent) parent.add(mesh);
+  return mesh;
 }
 
 function buildLights() {
@@ -397,8 +483,27 @@ function createBuilding(side, index) {
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.88 });
 
   makeBox(width, height, depth, mat, 0, height / 2, 0, group);
-  const roof = makeCone(width * 0.78, 0.95, materials.red, 0, height + 0.45, 0, group);
-  roof.rotation.y = Math.PI / 4;
+  if (index % 3 === 0) {
+    const roof = makeCone(width * 0.78, 0.95, materials.red, 0, height + 0.45, 0, group);
+    roof.rotation.y = Math.PI / 4;
+  } else if (index % 3 === 1) {
+    makeBox(width * 1.12, 0.28, depth * 1.08, materials.deepRed, 0, height + 0.18, 0, group);
+    const roof = makeCone(width * 0.62, 0.72, materials.gold, 0, height + 0.68, 0, group);
+    roof.scale.z = 0.35;
+    roof.rotation.y = Math.PI / 4;
+  } else {
+    makeBox(width * 1.08, 0.22, depth * 1.08, materials.stone, 0, height + 0.12, 0, group);
+    makeBox(width * 0.72, 0.36, depth * 0.72, materials.red, 0, height + 0.42, 0, group);
+  }
+  makeBox(width * 1.04, 0.08, depth * 1.03, materials.gold, 0, height * 0.58, 0, group);
+  makeBox(width * 0.46, 0.36, 0.05, materials.deepRed, 0, 0.46, side > 0 ? depth / 2 + 0.04 : -depth / 2 - 0.04, group);
+  if (index % 4 === 2) {
+    createLabelPlane("胡同", width * 0.46, 0.22, 0, 1.02, side > 0 ? depth / 2 + 0.05 : -depth / 2 - 0.05, group, {
+      background: "#7c1d1d",
+      foreground: "#f7d87a",
+      fontSize: 42,
+    });
+  }
 
   for (let row = 0; row < 4; row += 1) {
     for (let col = -1; col <= 1; col += 2) {
@@ -465,6 +570,128 @@ function createBackdropGate() {
   sceneryGroup.add(gate);
 }
 
+function addTiananmenLandmark(group) {
+  makeBox(6.6, 1.25, 1.2, materials.deepRed, 0, 0.7, 0, group);
+  makeBox(7.2, 0.34, 1.35, materials.stone, 0, 0.18, 0, group);
+  makeBox(5.7, 1.4, 1.05, materials.red, 0, 1.95, 0, group);
+  makeBox(4.6, 0.8, 1.0, materials.red, 0, 3.05, 0, group);
+  for (const x of [-2.25, -1.1, 0, 1.1, 2.25]) {
+    makeCylinder(0.26, 0.3, 0.16, materials.tankDark, x, 0.72, 0.64, group).rotation.x = Math.PI / 2;
+    makeBox(0.08, 0.58, 0.08, materials.gold, x, 1.76, 0.61, group);
+  }
+  const roof1 = makeCone(4.15, 0.72, materials.gold, 0, 3.52, 0, group);
+  roof1.scale.z = 0.2;
+  roof1.rotation.y = Math.PI / 4;
+  makeBox(6.2, 0.16, 1.34, materials.gold, 0, 3.22, 0, group);
+  const roof2 = makeCone(3.35, 0.58, materials.gold, 0, 4.02, 0, group);
+  roof2.scale.z = 0.18;
+  roof2.rotation.y = Math.PI / 4;
+  makeBox(4.85, 0.13, 1.18, materials.gold, 0, 3.78, 0, group);
+  createLabelPlane("天安门", 1.65, 0.44, 0, 2.66, 0.57, group);
+}
+
+function addXinhuamenLandmark(group) {
+  makeBox(6.8, 1.6, 0.72, materials.whiteWall, 0, 0.92, 0, group);
+  makeBox(1.55, 1.85, 0.8, materials.whiteWall, -2.65, 1.1, 0, group);
+  makeBox(1.55, 1.85, 0.8, materials.whiteWall, 2.65, 1.1, 0, group);
+  makeCylinder(0.36, 0.38, 0.12, materials.deepRed, 0, 0.8, 0.42, group).rotation.x = Math.PI / 2;
+  makeBox(2.1, 0.22, 0.9, materials.deepRed, 0, 1.72, 0, group);
+  const roof = makeCone(2.1, 0.56, materials.gold, 0, 2.16, 0, group);
+  roof.scale.z = 0.22;
+  roof.rotation.y = Math.PI / 4;
+  for (const x of [-2.65, 2.65]) {
+    const sideRoof = makeCone(1.25, 0.42, materials.gold, x, 2.17, 0, group);
+    sideRoof.scale.z = 0.2;
+    sideRoof.rotation.y = Math.PI / 4;
+    makeBox(1.6, 0.12, 0.86, materials.deepRed, x, 1.92, 0, group);
+  }
+  createLabelPlane("新华门", 1.55, 0.38, 0, 1.38, 0.45, group, { background: "#f4efe2", foreground: "#7c1d1d" });
+}
+
+function addTiantanLandmark(group) {
+  makeCylinder(2.4, 2.65, 0.38, materials.marble, 0, 0.2, 0, group);
+  makeCylinder(2.05, 2.25, 0.36, materials.marble, 0, 0.58, 0, group);
+  makeCylinder(1.65, 1.85, 0.34, materials.marble, 0, 0.94, 0, group);
+  for (let i = 0; i < 12; i += 1) {
+    const angle = (Math.PI * 2 * i) / 12;
+    makeCylinder(0.055, 0.065, 1.55, materials.deepRed, Math.cos(angle) * 1.18, 1.78, Math.sin(angle) * 1.18, group);
+  }
+  makeCylinder(1.25, 1.32, 1.34, materials.red, 0, 1.72, 0, group);
+  const roof1 = makeRoundCone(1.75, 0.66, materials.templeBlue, 0, 2.68, 0, group, 22);
+  roof1.scale.y = 0.72;
+  const body2 = makeCylinder(0.95, 1.02, 0.82, materials.red, 0, 3.02, 0, group);
+  body2.scale.y = 0.82;
+  const roof2 = makeRoundCone(1.38, 0.54, materials.templeBlue, 0, 3.58, 0, group, 22);
+  roof2.scale.y = 0.72;
+  makeCylinder(0.62, 0.72, 0.56, materials.red, 0, 3.78, 0, group);
+  const roof3 = makeRoundCone(0.96, 0.48, materials.templeBlue, 0, 4.22, 0, group, 22);
+  roof3.scale.y = 0.7;
+  makeCylinder(0.08, 0.1, 0.35, materials.gold, 0, 4.52, 0, group);
+  createLabelPlane("祈年殿", 1.42, 0.34, 0, 0.94, 1.8, group, { background: "#2468a8", foreground: "#f7d87a", fontSize: 44 });
+}
+
+function addMonumentLandmark(group) {
+  makeBox(3.3, 0.34, 2.05, materials.stone, 0, 0.17, 0, group);
+  makeBox(2.65, 0.34, 1.62, materials.marble, 0, 0.52, 0, group);
+  makeBox(1.65, 0.44, 1.0, materials.stone, 0, 0.9, 0, group);
+  makeBox(0.82, 3.75, 0.58, materials.marble, 0, 2.9, 0, group);
+  makeBox(1.04, 0.22, 0.76, materials.stone, 0, 4.9, 0, group);
+  const top = makeCone(0.58, 0.62, materials.marble, 0, 5.32, 0, group);
+  top.scale.z = 0.72;
+  top.rotation.y = Math.PI / 4;
+  createLabelPlane("人民英雄纪念碑", 1.36, 0.42, 0, 2.94, 0.32, group, { background: "#d8d0bd", foreground: "#7c1d1d", fontSize: 34 });
+}
+
+function addCctvLandmark(group) {
+  const towerA = makeBox(1.05, 5.6, 1.0, materials.darkGlass, -1.05, 2.75, 0, group);
+  towerA.rotation.z = -0.18;
+  const towerB = makeBox(1.05, 5.7, 1.0, materials.darkGlass, 1.15, 2.8, 0, group);
+  towerB.rotation.z = 0.2;
+  const bridgeTop = makeBox(3.5, 0.95, 1.02, materials.darkGlass, 0.04, 5.08, 0, group);
+  bridgeTop.rotation.z = 0.04;
+  const bridgeLow = makeBox(2.25, 0.78, 0.98, materials.glassBlue, 0.15, 1.08, 0, group);
+  bridgeLow.rotation.z = -0.12;
+  for (const x of [-1.05, 1.15, 0.04]) {
+    for (let y = 1; y < 5.6; y += 0.62) {
+      makeBox(0.75, 0.035, 1.04, materials.glassBlue, x, y, 0.02, group);
+    }
+  }
+  createLabelPlane("央视新大楼", 1.55, 0.36, 0.05, 0.62, 0.55, group, { background: "#263d52", foreground: "#bfefff", fontSize: 36 });
+}
+
+function buildLandmarkModel(group, type) {
+  clearGroup(group);
+  if (type === "tiananmen") addTiananmenLandmark(group);
+  if (type === "xinhuamen") addXinhuamenLandmark(group);
+  if (type === "tiantan") addTiantanLandmark(group);
+  if (type === "monument") addMonumentLandmark(group);
+  if (type === "cctv") addCctvLandmark(group);
+  group.userData.landmarkType = type;
+  setMeshShadow(group);
+}
+
+function randomLandmarkType(excludedType = "") {
+  const options = LANDMARK_TYPES.filter((type) => type !== excludedType);
+  return pick(options.length > 0 ? options : LANDMARK_TYPES);
+}
+
+function createLandmark(side, index) {
+  const group = new THREE.Group();
+  group.position.x = side * (8.15 + (index % 2) * 1.05);
+  group.userData = {
+    baseZ: -126 + index * 19,
+    speedFactor: 0.7,
+    isLandmark: true,
+    side,
+    lastZ: null,
+    landmarkType: "",
+  };
+  group.scale.setScalar(0.9 + (index % 3) * 0.08);
+  buildLandmarkModel(group, randomLandmarkType());
+  sceneryGroup.add(group);
+  sceneryItems.push(group);
+}
+
 function buildScenery() {
   createBackdropGate();
   for (let i = 0; i < 18; i += 1) {
@@ -478,6 +705,9 @@ function buildScenery() {
   for (let i = 0; i < 16; i += 1) {
     createLamp(-1, i);
     createLamp(1, i + 3);
+  }
+  for (let i = 0; i < 10; i += 1) {
+    createLandmark(i % 2 === 0 ? -1 : 1, i);
   }
 }
 
@@ -505,6 +735,7 @@ const player = {
   rightKnee: new THREE.Group(),
   leftShoe: null,
   rightShoe: null,
+  rocketLauncher: null,
 };
 
 function buildPlayer() {
@@ -556,10 +787,30 @@ function buildPlayer() {
   player.bodyPivot.add(player.leftLeg, player.rightLeg);
   buildLeg(player.leftLeg, player.leftKnee, -1);
   buildLeg(player.rightLeg, player.rightKnee, 1);
+  buildShoulderRocketLauncher();
 
   player.root.scale.setScalar(0.88);
   setMeshShadow(player.root);
   scene.add(player.root);
+}
+
+function buildShoulderRocketLauncher() {
+  const launcher = new THREE.Group();
+  launcher.visible = false;
+  launcher.position.set(0.56, 2.72, -0.02);
+  launcher.rotation.set(0.03, 0, -0.08);
+
+  const tube = makeCylinder(0.095, 0.095, 1.05, materials.rocketTube, 0, 0, 0, launcher);
+  tube.rotation.x = Math.PI / 2;
+  const frontBand = makeCylinder(0.108, 0.108, 0.13, materials.rocketBand, 0, 0, 0.45, launcher);
+  frontBand.rotation.x = Math.PI / 2;
+  const rearBand = makeCylinder(0.108, 0.108, 0.12, materials.rocketBand, 0, 0, -0.43, launcher);
+  rearBand.rotation.x = Math.PI / 2;
+  makeBox(0.12, 0.28, 0.12, materials.rocketTube, 0.02, -0.2, -0.12, launcher);
+  makeBox(0.22, 0.08, 0.34, materials.rocketBand, 0.02, -0.36, -0.08, launcher);
+
+  player.rocketLauncher = launcher;
+  player.bodyPivot.add(launcher);
 }
 
 function buildArm(armGroup, side) {
@@ -593,7 +844,7 @@ function createTank(lane, z) {
     z,
     passed: false,
     wobble: Math.random() * Math.PI * 2,
-    fireCooldown: 0.45 + Math.random() * 0.8,
+    fireCooldown: 0,
   };
 
   makeBox(2.45, 0.62, 1.62, materials.tank, 0, 0.68, 0, group);
@@ -648,11 +899,8 @@ function createTank(lane, z) {
 function createProjectile(tank) {
   const group = new THREE.Group();
   const tankData = tank.userData;
-  const targetX = player.root.position.x;
   const startX = tank.position.x;
   const startZ = tankData.z + 1.65;
-  const travelTime = Math.max(0.55, Math.abs(PLAYER_Z - startZ) / 28);
-  const directionX = clamp((targetX - startX) / travelTime, -3.6, 3.6);
 
   const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
   body.rotation.x = Math.PI / 2;
@@ -661,12 +909,12 @@ function createProjectile(tank) {
   makeSphere(0.06, materials.projectileTip, 0, 0.13, -0.24, group, 8);
 
   group.position.set(startX, 1.22, startZ);
-  group.rotation.y = Math.atan2(directionX, game.speed + 27);
   group.userData = {
     type: "projectile",
+    lane: tankData.lane,
     z: startZ,
     velocityZ: game.speed + 27,
-    velocityX: directionX,
+    velocityX: 0,
     wobble: Math.random() * Math.PI * 2,
     hit: false,
   };
@@ -698,6 +946,33 @@ function createBun(lane, z = SPAWN_Z) {
   group.position.set(LANES[lane], 0.05, z);
   group.userData = {
     type: "bun",
+    lane,
+    z,
+    wobble: Math.random() * Math.PI * 2,
+  };
+  setMeshShadow(group);
+  pickupGroup.add(group);
+  return group;
+}
+
+function createRocketLauncherPickup(lane, z = SPAWN_Z) {
+  const group = new THREE.Group();
+
+  const tube = makeCylinder(0.11, 0.11, 0.92, materials.rocketTube, 0, 0.42, 0, group);
+  tube.rotation.z = Math.PI / 2;
+  const muzzle = makeCylinder(0.14, 0.14, 0.16, materials.rocketBand, 0.5, 0.42, 0, group);
+  muzzle.rotation.z = Math.PI / 2;
+  const rear = makeCylinder(0.13, 0.13, 0.13, materials.tankMetal, -0.48, 0.42, 0, group);
+  rear.rotation.z = Math.PI / 2;
+  makeBox(0.12, 0.22, 0.12, materials.rocketTube, -0.12, 0.24, 0, group);
+  makeBox(0.26, 0.08, 0.16, materials.rocketBand, 0.12, 0.21, 0, group);
+  const glow = makeSphere(0.62, materials.powerupGlow, 0, 0.42, 0, group, 12);
+  glow.castShadow = false;
+  glow.receiveShadow = false;
+
+  group.position.set(LANES[lane], 0.04, z);
+  group.userData = {
+    type: "rocketLauncher",
     lane,
     z,
     wobble: Math.random() * Math.PI * 2,
@@ -759,9 +1034,9 @@ function spawnWave() {
   game.spawnCooldown = lerp(1.12, 0.58, difficulty) + Math.random() * 0.18;
 }
 
-function spawnBunPickup() {
+function spawnPickup() {
   if (game.pickups.length > 0) {
-    game.bunCooldown = BUN_COOLDOWN_MIN * 0.65;
+    game.pickupCooldown = PICKUP_COOLDOWN_MIN * 0.65;
     return;
   }
 
@@ -772,9 +1047,11 @@ function spawnBunPickup() {
       ),
   );
   const lane = pick(openLanes.length > 0 ? openLanes : [0, 1, 2]);
-  const bun = createBun(lane, SPAWN_Z - Math.random() * 8);
-  game.pickups.push(bun);
-  game.bunCooldown = BUN_COOLDOWN_MIN + Math.random() * BUN_COOLDOWN_RANDOM;
+  const z = SPAWN_Z - Math.random() * 8;
+  const pickup =
+    Math.random() < ROCKET_PICKUP_CHANCE ? createRocketLauncherPickup(lane, z) : createBun(lane, z);
+  game.pickups.push(pickup);
+  game.pickupCooldown = PICKUP_COOLDOWN_MIN + Math.random() * PICKUP_COOLDOWN_RANDOM;
 }
 
 function removeObstacleAt(index) {
@@ -784,11 +1061,23 @@ function removeObstacleAt(index) {
   game.obstacles.splice(index, 1);
 }
 
+function removeObstacleObject(obstacle) {
+  const index = game.obstacles.indexOf(obstacle);
+  if (index >= 0) removeObstacleAt(index);
+}
+
 function removeProjectileAt(index) {
   const projectile = game.projectiles[index];
   if (!projectile) return;
   projectileGroup.remove(projectile);
   game.projectiles.splice(index, 1);
+}
+
+function removeRocketAt(index) {
+  const rocket = game.rockets[index];
+  if (!rocket) return;
+  rocketGroup.remove(rocket);
+  game.rockets.splice(index, 1);
 }
 
 function removePickupAt(index) {
@@ -798,6 +1087,13 @@ function removePickupAt(index) {
   game.pickups.splice(index, 1);
 }
 
+function removeExplosionAt(index) {
+  const explosion = game.explosions[index];
+  if (!explosion) return;
+  explosionGroup.remove(explosion);
+  game.explosions.splice(index, 1);
+}
+
 function resetGame() {
   for (const obstacle of game.obstacles) {
     obstacleGroup.remove(obstacle);
@@ -805,8 +1101,14 @@ function resetGame() {
   for (const projectile of game.projectiles) {
     projectileGroup.remove(projectile);
   }
+  for (const rocket of game.rockets) {
+    rocketGroup.remove(rocket);
+  }
   for (const pickup of game.pickups) {
     pickupGroup.remove(pickup);
+  }
+  for (const explosion of game.explosions) {
+    explosionGroup.remove(explosion);
   }
 
   game.state = "running";
@@ -826,11 +1128,18 @@ function resetGame() {
   game.lastStepBucket = 0;
   game.obstacles = [];
   game.projectiles = [];
+  game.rockets = [];
   game.pickups = [];
+  game.explosions = [];
   game.spawnCooldown = 0.5;
-  game.bunCooldown = BUN_COOLDOWN_MIN;
+  game.pickupCooldown = PICKUP_COOLDOWN_MIN;
+  game.tankFireCooldown = PROJECTILE_FIRE_INTERVAL;
+  game.rocketAmmo = 0;
+  game.rocketEquipTimer = 0;
+  game.rocketFireCooldown = 0;
   game.flashTimer = 0;
   player.root.visible = true;
+  if (player.rocketLauncher) player.rocketLauncher.visible = false;
   startScreen.classList.add("hidden");
   gameOverScreen.classList.add("hidden");
   updateHud();
@@ -874,6 +1183,115 @@ function healPlayer() {
   if (game.state !== "running") return;
   game.health = Math.min(MAX_HEALTH, game.health + 1);
   game.flashTimer = Math.max(game.flashTimer, 0.16);
+  updateHud();
+}
+
+function grantRocketLauncher() {
+  if (game.state !== "running") return;
+  game.rocketAmmo = 1;
+  game.rocketEquipTimer = ROCKET_CHARGE_DURATION;
+  game.rocketFireCooldown = 0.35;
+  game.flashTimer = Math.max(game.flashTimer, 0.18);
+}
+
+function findRocketTarget() {
+  const tanks = game.obstacles.filter(
+    (obstacle) =>
+      obstacle.userData.type === "tank" &&
+      obstacle.userData.z < PLAYER_Z - 4 &&
+      obstacle.userData.z > SPAWN_Z + 4,
+  );
+  if (tanks.length === 0) return null;
+
+  const sameLaneTanks = tanks.filter((tank) => tank.userData.lane === game.lane);
+  const candidates = sameLaneTanks.length > 0 ? sameLaneTanks : tanks;
+  return candidates.sort((a, b) => b.userData.z - a.userData.z)[0];
+}
+
+function createPlayerRocket(target) {
+  const group = new THREE.Group();
+  const startX = player.root.position.x + 0.32;
+  const startY = player.root.position.y + 2.25;
+  const startZ = PLAYER_Z - 0.62;
+
+  const body = makeCylinder(0.075, 0.09, 0.62, materials.rocketBody, 0, 0, 0, group);
+  body.rotation.x = Math.PI / 2;
+  const tip = makeCone(0.11, 0.22, materials.rocketTip, 0, 0, -0.42, group);
+  tip.rotation.x = -Math.PI / 2;
+  makeBox(0.22, 0.045, 0.14, materials.rocketTip, 0, -0.08, 0.28, group);
+  makeBox(0.045, 0.22, 0.14, materials.rocketTip, 0, -0.08, 0.28, group);
+
+  group.position.set(startX, startY, startZ);
+  group.userData = {
+    type: "playerRocket",
+    target,
+    life: 2.6,
+    speed: 52,
+    wobble: Math.random() * Math.PI * 2,
+  };
+  setMeshShadow(group);
+  rocketGroup.add(group);
+  return group;
+}
+
+function tryFireRocket() {
+  if (game.rocketAmmo <= 0 || game.rocketFireCooldown > 0 || game.rockets.length > 0) return;
+  const target = findRocketTarget();
+  if (!target) return;
+
+  game.rocketAmmo = 0;
+  game.rocketEquipTimer = 1.35;
+  game.rocketFireCooldown = 1.1;
+  game.rockets.push(createPlayerRocket(target));
+}
+
+function createExplosion(x, z) {
+  const group = new THREE.Group();
+  group.position.set(x, 0.86, z);
+  group.userData = {
+    life: 0.72,
+    maxLife: 0.72,
+    spin: (Math.random() - 0.5) * 2.4,
+  };
+
+  const colors = [0xfff07a, 0xffa340, 0xe94b35, 0x6e6a60];
+  for (let i = 0; i < 15; i += 1) {
+    const angle = (Math.PI * 2 * i) / 15;
+    const radius = 0.12 + Math.random() * 0.48;
+    const material = new THREE.MeshBasicMaterial({
+      color: colors[i % colors.length],
+      transparent: true,
+      opacity: i % 4 === 3 ? 0.55 : 0.85,
+      depthWrite: false,
+    });
+    const puff = makeSphere(0.14 + Math.random() * 0.2, material, Math.cos(angle) * radius, Math.random() * 0.55, Math.sin(angle) * radius, group, 9);
+    puff.castShadow = false;
+    puff.receiveShadow = false;
+    puff.userData.outward = new THREE.Vector3(Math.cos(angle) * (0.9 + Math.random()), 0.5 + Math.random() * 1.2, Math.sin(angle) * (0.9 + Math.random()));
+  }
+
+  const flash = makeSphere(
+    0.72,
+    new THREE.MeshBasicMaterial({ color: 0xfff7b0, transparent: true, opacity: 0.62, depthWrite: false }),
+    0,
+    0.28,
+    0,
+    group,
+    12,
+  );
+  flash.castShadow = false;
+  flash.receiveShadow = false;
+
+  explosionGroup.add(group);
+  game.explosions.push(group);
+  game.flashTimer = Math.max(game.flashTimer, 0.24);
+}
+
+function destroyTank(tank) {
+  if (!tank || !game.obstacles.includes(tank)) return;
+  createExplosion(tank.position.x, tank.userData.z);
+  removeObstacleObject(tank);
+  game.score += 250;
   updateHud();
 }
 
@@ -992,7 +1410,11 @@ function updateWorldMotion(dt) {
     const span = 145;
     let z = item.userData.baseZ + (game.distance * item.userData.speedFactor) % span;
     if (z > 22) z -= span;
+    if (item.userData.isLandmark && item.userData.lastZ !== null && z < item.userData.lastZ - 70) {
+      buildLandmarkModel(item, randomLandmarkType(item.userData.landmarkType));
+    }
     item.position.z = z;
+    item.userData.lastZ = z;
   }
 
   for (const particle of dustPool) {
@@ -1023,12 +1445,15 @@ function updateObstacles(dt) {
       obstacle.userData.fireCooldown -= dt;
       if (
         obstacle.userData.fireCooldown <= 0 &&
+        game.tankFireCooldown <= 0 &&
+        obstacle.userData.lane === game.lane &&
         obstacle.userData.z > SPAWN_Z + 18 &&
-        obstacle.userData.z < -7 &&
+        obstacle.userData.z < -8 &&
         game.projectiles.length < 18
       ) {
         game.projectiles.push(createProjectile(obstacle));
         obstacle.userData.fireCooldown = PROJECTILE_FIRE_INTERVAL;
+        game.tankFireCooldown = PROJECTILE_FIRE_INTERVAL;
       }
     }
   }
@@ -1038,6 +1463,88 @@ function updateObstacles(dt) {
     if (obstacle.position.z > 18) {
       obstacleGroup.remove(obstacle);
       game.obstacles.splice(i, 1);
+    }
+  }
+}
+
+function updateRocketLauncher(dt) {
+  game.rocketFireCooldown = Math.max(0, game.rocketFireCooldown - dt);
+
+  if (game.rocketAmmo > 0) {
+    game.rocketEquipTimer = Math.max(game.rocketEquipTimer, 0.6);
+    tryFireRocket();
+  } else {
+    game.rocketEquipTimer = Math.max(0, game.rocketEquipTimer - dt);
+  }
+
+  if (player.rocketLauncher) {
+    player.rocketLauncher.visible = game.rocketAmmo > 0 || game.rocketEquipTimer > 0 || game.rockets.length > 0;
+    player.rocketLauncher.rotation.z = -0.08 + Math.sin(game.time * 9) * 0.015;
+  }
+}
+
+function updateRockets(dt) {
+  for (const rocket of game.rockets) {
+    const data = rocket.userData;
+    data.life -= dt;
+
+    if (!data.target || !game.obstacles.includes(data.target)) {
+      data.target = findRocketTarget();
+      if (!data.target) {
+        rocket.position.z -= data.speed * dt;
+        rocket.position.y += Math.sin(game.time * 14 + data.wobble) * 0.01;
+        continue;
+      }
+    }
+
+    const target = data.target;
+    const targetPosition = new THREE.Vector3(target.position.x, 1.1, target.userData.z + 0.15);
+    const direction = targetPosition.sub(rocket.position);
+    const distance = direction.length();
+    const step = data.speed * dt;
+
+    if (distance <= step + 0.58) {
+      destroyTank(target);
+      data.life = 0;
+      continue;
+    }
+
+    direction.normalize();
+    rocket.position.addScaledVector(direction, step);
+    rocket.rotation.y = Math.atan2(direction.x, -direction.z);
+    rocket.rotation.x = -direction.y * 0.25;
+  }
+
+  for (let i = game.rockets.length - 1; i >= 0; i -= 1) {
+    const rocket = game.rockets[i];
+    if (rocket.userData.life <= 0 || rocket.position.z < SPAWN_Z - 18 || Math.abs(rocket.position.x) > 10) {
+      removeRocketAt(i);
+    }
+  }
+}
+
+function updateExplosions(dt) {
+  for (const explosion of game.explosions) {
+    const data = explosion.userData;
+    data.life -= dt;
+    const progress = 1 - clamp(data.life / data.maxLife, 0, 1);
+    explosion.scale.setScalar(1 + progress * 1.25);
+    explosion.rotation.y += data.spin * dt;
+    explosion.position.y += dt * 0.22;
+
+    for (const child of explosion.children) {
+      if (child.userData.outward) {
+        child.position.addScaledVector(child.userData.outward, dt);
+      }
+      if (child.material) {
+        child.material.opacity = clamp(1 - progress, 0, 1) * (child.userData.outward ? 0.82 : 0.58);
+      }
+    }
+  }
+
+  for (let i = game.explosions.length - 1; i >= 0; i -= 1) {
+    if (game.explosions[i].userData.life <= 0) {
+      removeExplosionAt(i);
     }
   }
 }
@@ -1079,7 +1586,7 @@ function updatePickups(dt) {
     pickup.userData.z += game.speed * dt;
     pickup.position.z = pickup.userData.z;
     pickup.position.y = 0.05 + Math.sin(game.time * 4.2 + pickup.userData.wobble) * 0.08;
-    pickup.rotation.y += dt * 1.6;
+    pickup.rotation.y += dt * (pickup.userData.type === "rocketLauncher" ? 2.4 : 1.6);
   }
 
   for (let i = game.pickups.length - 1; i >= 0; i -= 1) {
@@ -1089,7 +1596,11 @@ function updatePickups(dt) {
     const canReach = game.slideAmount < 0.82;
 
     if (xOverlap && zOverlap && canReach) {
-      healPlayer();
+      if (pickup.userData.type === "rocketLauncher") {
+        grantRocketLauncher();
+      } else {
+        healPlayer();
+      }
       removePickupAt(i);
       continue;
     }
@@ -1145,14 +1656,17 @@ function update(dt) {
     game.speed = Math.min(31, 17 + game.distance / 150);
     game.score = Math.floor(game.distance * 7.5);
     game.invincibleTimer = Math.max(0, game.invincibleTimer - dt);
+    game.tankFireCooldown = Math.max(0, game.tankFireCooldown - dt);
 
     game.spawnCooldown -= dt;
     if (game.spawnCooldown <= 0) spawnWave();
 
-    game.bunCooldown -= dt;
-    if (game.bunCooldown <= 0) spawnBunPickup();
+    game.pickupCooldown -= dt;
+    if (game.pickupCooldown <= 0) spawnPickup();
 
     updateObstacles(dt);
+    updateRocketLauncher(dt);
+    updateRockets(dt);
     updateProjectiles(dt);
     updatePickups(dt);
     checkCollision();
@@ -1161,6 +1675,7 @@ function update(dt) {
 
   updatePlayer(dt);
   updateWorldMotion(dt);
+  updateExplosions(dt);
   updateCamera();
 }
 
