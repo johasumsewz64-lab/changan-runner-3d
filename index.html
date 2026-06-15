@@ -72,6 +72,51 @@
     </main>
 
     <noscript>需要启用 JavaScript 才能游玩。</noscript>
-    <script type="module" src="main.js?v=landmarks-3"></script>
+    <script type="module">
+      const startButton = document.getElementById("startButton");
+      const startPanel = document.querySelector("#startScreen .panel");
+      const originalButtonText = startButton.textContent;
+      startButton.disabled = true;
+      startButton.textContent = "加载中...";
+
+      function showLoadError(message) {
+        let errorText = document.getElementById("loadErrorText");
+        if (!errorText) {
+          errorText = document.createElement("p");
+          errorText.id = "loadErrorText";
+          errorText.style.color = "#b11226";
+          errorText.style.fontWeight = "700";
+          errorText.style.marginTop = "12px";
+          startPanel.appendChild(errorText);
+        }
+        errorText.textContent = message;
+        startButton.textContent = "加载失败";
+      }
+
+      async function loadThree() {
+        const sources = [
+          "./vendor/three.module.js",
+          "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.min.js",
+        ];
+        let lastError = null;
+        for (const source of sources) {
+          try {
+            return await import(source);
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError || new Error("Three.js 加载失败");
+      }
+
+      try {
+        window.THREE = await loadThree();
+        await import("./main.js?v=clickfix-1");
+        startButton.disabled = false;
+        startButton.textContent = originalButtonText;
+      } catch (error) {
+        showLoadError(`游戏脚本没有加载成功：${error?.message || error}`);
+      }
+    </script>
   </body>
 </html>

@@ -1,4 +1,8 @@
-import * as THREE from "./vendor/three.module.js";
+const THREE = window.THREE;
+
+if (!THREE) {
+  throw new Error("Three.js 没有加载成功，请检查 vendor/three.module.js 或网络备用源。");
+}
 
 const canvas = document.getElementById("gameCanvas");
 const scoreText = document.getElementById("scoreText");
