@@ -85,7 +85,7 @@ const smoothstep = (value) => {
 };
 
 const COLLISION_PROFILES = {
-  tank: { halfWidth: 1.44, depth: 3.15 },
+  tank: { halfWidth: 1.44, depth: 2.35 },
   barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
   gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
 };
@@ -517,11 +517,11 @@ function createBuilding(side, index) {
     }
   }
 
-  group.position.x = side * (9.4 + (index % 2) * 1.25);
-  group.userData.baseZ = -160 + index * 20;
-  group.userData.speedFactor = 0.76;
-  group.userData.span = 180;
-  group.scale.setScalar(0.92 + (index % 5) * 0.06);
+  group.position.x = side * (13.4 + (index % 2) * 1.05);
+  group.userData.baseZ = -138 + index * 48;
+  group.userData.speedFactor = 0.7;
+  group.userData.span = 240;
+  group.scale.setScalar(0.82 + (index % 4) * 0.05);
   setMeshShadow(group);
   sceneryGroup.add(group);
   sceneryItems.push(group);
@@ -841,7 +841,7 @@ function createLandmark(side, index) {
 
 function buildScenery() {
   createBackdropGate();
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     createBuilding(-1, i);
     createBuilding(1, i + 4);
   }
@@ -1058,7 +1058,7 @@ function createTank(lane, z) {
 
   group.position.set(LANES[lane], 0.03, z);
   group.rotation.y = 0;
-  group.scale.set(1.48, 2.28, 2.56);
+  group.scale.set(1.48, 2.08, 1.72);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
@@ -1068,7 +1068,7 @@ function createProjectile(tank) {
   const group = new THREE.Group();
   const tankData = tank.userData;
   const startX = tank.position.x;
-  const startZ = tankData.z + 2.74 * tank.scale.z;
+  const startZ = tankData.z + 2.68 * tank.scale.z;
   const startY = 1.31 * tank.scale.y;
 
   const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
