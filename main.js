@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "./vendor/three.module.js";
 
 const canvas = document.getElementById("gameCanvas");
 const scoreText = document.getElementById("scoreText");
@@ -81,7 +81,7 @@ const smoothstep = (value) => {
 };
 
 const COLLISION_PROFILES = {
-  tank: { halfWidth: 1.44, depth: 2.18 },
+  tank: { halfWidth: 1.44, depth: 3.15 },
   barrier: { halfWidth: 0.86, depth: 0.72, jumpClearHeight: 1.05 },
   gate: { halfWidth: 0.9, depth: 0.82, slideClearAmount: 0.64 },
 };
@@ -662,6 +662,233 @@ function addCctvLandmark(group) {
   createLabelPlane("央视新大楼", 1.55, 0.36, 0.05, 0.62, 0.55, group, { background: "#263d52", foreground: "#bfefff", fontSize: 36 });
 }
 
+function addTiledRoof(parent, width, depth, y, z, material, options = {}) {
+  const trim = options.trim ?? materials.gold;
+  const tiers = options.tiers ?? 3;
+  const offsetX = options.x ?? 0;
+
+  for (let i = 0; i < tiers; i += 1) {
+    const layerWidth = width - i * 0.42;
+    const layerDepth = depth - i * 0.24;
+    const slab = makeBox(layerWidth, 0.12, layerDepth, material, offsetX, y + i * 0.11, z, parent);
+    slab.rotation.x = i === 0 ? -0.03 : 0;
+  }
+
+  const tileCount = options.tileCount ?? Math.max(9, Math.floor(width / 0.36));
+  for (let i = 0; i < tileCount; i += 1) {
+    const x = offsetX - width * 0.42 + (i / Math.max(1, tileCount - 1)) * width * 0.84;
+    const tile = makeCylinder(0.035, 0.04, depth * 0.88, material, x, y + tiers * 0.11 + 0.02, z, parent);
+    tile.rotation.x = Math.PI / 2;
+  }
+
+  makeBox(width * 0.96, 0.09, 0.11, trim, offsetX, y + 0.26, z + depth * 0.48, parent);
+  makeBox(width * 0.96, 0.09, 0.11, trim, offsetX, y + 0.26, z - depth * 0.48, parent);
+  makeBox(0.12, 0.13, depth * 0.94, trim, offsetX - width * 0.49, y + 0.25, z, parent);
+  makeBox(0.12, 0.13, depth * 0.94, trim, offsetX + width * 0.49, y + 0.25, z, parent);
+
+  for (const x of [offsetX - width * 0.5, offsetX + width * 0.5]) {
+    for (const edgeZ of [z - depth * 0.48, z + depth * 0.48]) {
+      const corner = makeBox(0.34, 0.16, 0.24, trim, x, y + 0.32, edgeZ, parent);
+      corner.rotation.z = x < offsetX ? 0.28 : -0.28;
+    }
+  }
+}
+
+function addStoneRailing(parent, width, depth, y, z) {
+  makeBox(width, 0.14, 0.12, materials.marble, 0, y, z + depth / 2, parent);
+  makeBox(width, 0.14, 0.12, materials.marble, 0, y, z - depth / 2, parent);
+  makeBox(0.12, 0.14, depth, materials.marble, -width / 2, y, z, parent);
+  makeBox(0.12, 0.14, depth, materials.marble, width / 2, y, z, parent);
+
+  for (let i = 0; i <= 8; i += 1) {
+    const x = -width / 2 + (i / 8) * width;
+    makeBox(0.18, 0.34, 0.18, materials.marble, x, y + 0.16, z + depth / 2, parent);
+    makeBox(0.18, 0.34, 0.18, materials.marble, x, y + 0.16, z - depth / 2, parent);
+  }
+}
+
+function addFrontStairs(parent, width, z, y = 0.16, steps = 5) {
+  for (let i = 0; i < steps; i += 1) {
+    makeBox(width - i * 0.16, 0.08, 0.24, materials.stone, 0, y + i * 0.08, z - i * 0.18, parent);
+  }
+}
+
+function addFacadeDoor(parent, x, y, width, height, z, options = {}) {
+  makeBox(width + 0.16, height + 0.18, 0.08, materials.gold, x, y, z, parent);
+  makeBox(width, height, 0.09, options.material ?? materials.deepRed, x, y, z + 0.02, parent);
+  for (let i = 0; i < 3; i += 1) {
+    makeSphere(0.035, materials.gold, x + width * 0.24, y - height * 0.25 + i * height * 0.22, z + 0.08, parent, 8);
+    makeSphere(0.035, materials.gold, x - width * 0.24, y - height * 0.25 + i * height * 0.22, z + 0.08, parent, 8);
+  }
+}
+
+function addFacadeWindows(parent, count, width, y, z) {
+  for (let i = 0; i < count; i += 1) {
+    const x = -width / 2 + ((i + 0.5) / count) * width;
+    makeBox(0.42, 0.44, 0.08, materials.deepRed, x, y, z, parent);
+    makeBox(0.34, 0.34, 0.09, materials.tankDark, x, y, z + 0.03, parent);
+    makeBox(0.04, 0.34, 0.1, materials.gold, x, y, z + 0.07, parent);
+    makeBox(0.34, 0.04, 0.1, materials.gold, x, y, z + 0.07, parent);
+  }
+}
+
+function addCircularRailing(parent, radius, y, count = 18) {
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    makeCylinder(0.04, 0.055, 0.34, materials.marble, Math.sin(angle) * radius, y, Math.cos(angle) * radius, parent);
+  }
+}
+
+function addRadialRoofTiles(parent, radius, y, material, count = 26) {
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    const strip = makeBox(0.03, 0.055, radius * 0.88, material, Math.sin(angle) * radius * 0.33, y, Math.cos(angle) * radius * 0.33, parent);
+    strip.rotation.y = angle;
+  }
+}
+
+function addTiananmenLandmark(group) {
+  makeBox(8.2, 0.28, 2.7, materials.stone, 0, 0.14, 0, group);
+  makeBox(7.8, 1.35, 2.3, materials.red, 0, 0.92, 0, group);
+  makeBox(8.35, 0.28, 2.5, materials.marble, 0, 1.72, 0, group);
+  addStoneRailing(group, 7.9, 2.25, 1.92, 0);
+  addFrontStairs(group, 2.2, 1.72, 0.2, 4);
+
+  addFacadeDoor(group, -2.35, 0.78, 0.62, 0.92, 1.17, { material: materials.tankDark });
+  addFacadeDoor(group, 0, 0.78, 0.78, 1.14, 1.18, { material: materials.tankDark });
+  addFacadeDoor(group, 2.35, 0.78, 0.62, 0.92, 1.17, { material: materials.tankDark });
+
+  makeBox(6.3, 1.1, 1.55, materials.deepRed, 0, 2.56, 0, group);
+  makeBox(5.55, 0.95, 1.35, materials.red, 0, 3.52, 0, group);
+  for (const x of [-2.6, -1.3, 0, 1.3, 2.6]) {
+    makeCylinder(0.07, 0.08, 1.0, materials.deepRed, x, 2.54, 0.82, group);
+    makeBox(0.22, 0.26, 0.08, materials.gold, x, 2.05, 0.86, group);
+  }
+  addFacadeWindows(group, 7, 5.45, 2.66, 0.82);
+  createLabelPlane("\u5929\u5b89\u95e8", 1.25, 0.34, 0, 3.26, 0.84, group, { fontSize: 42 });
+
+  addTiledRoof(group, 7.4, 2.35, 3.08, 0, materials.gold, { tileCount: 18 });
+  addTiledRoof(group, 5.8, 1.85, 4.14, 0, materials.gold, { tileCount: 14 });
+}
+
+function addXinhuamenLandmark(group) {
+  makeBox(7.8, 0.25, 1.8, materials.marble, 0, 0.13, 0, group);
+  makeBox(2.1, 2.0, 1.15, materials.red, 0, 1.18, 0, group);
+  makeBox(2.9, 1.35, 1.05, materials.red, -2.55, 0.96, 0, group);
+  makeBox(2.9, 1.35, 1.05, materials.red, 2.55, 0.96, 0, group);
+  makeBox(2.5, 0.22, 1.25, materials.marble, 0, 0.36, 0, group);
+  makeBox(2.45, 0.2, 1.2, materials.marble, 0, 2.16, 0, group);
+  makeBox(0.85, 1.35, 0.12, materials.tankDark, 0, 1.1, 0.6, group);
+  makeBox(0.34, 1.1, 0.09, materials.deepRed, -0.24, 1.06, 0.68, group).rotation.y = -0.22;
+  makeBox(0.34, 1.1, 0.09, materials.deepRed, 0.24, 1.06, 0.68, group).rotation.y = 0.22;
+
+  addTiledRoof(group, 3.0, 1.42, 2.18, 0, materials.tankTrim, { trim: materials.tankLight, tileCount: 9 });
+  addTiledRoof(group, 3.25, 1.24, 1.68, 0, materials.tankTrim, { trim: materials.tankLight, tileCount: 9, x: -2.55 });
+  addTiledRoof(group, 3.25, 1.24, 1.68, 0, materials.tankTrim, { trim: materials.tankLight, tileCount: 9, x: 2.55 });
+
+  for (const x of [-3.35, -1.75, 1.75, 3.35]) {
+    makeBox(0.32, 0.42, 0.32, materials.marble, x, 0.55, 0.76, group);
+    const cap = makeRoundCone(0.2, 0.18, materials.tankTrim, x, 0.86, 0.76, group, 8);
+    cap.scale.y = 0.7;
+  }
+  createLabelPlane("\u65b0\u534e\u95e8", 1.08, 0.32, 0, 1.74, 0.62, group, {
+    background: "#f4efe2",
+    foreground: "#7c1d1d",
+    fontSize: 42,
+  });
+}
+
+function addTiantanLandmark(group) {
+  makeCylinder(3.55, 3.7, 0.28, materials.marble, 0, 0.14, 0, group);
+  makeCylinder(2.9, 3.05, 0.28, materials.marble, 0, 0.48, 0, group);
+  makeCylinder(2.25, 2.4, 0.28, materials.marble, 0, 0.82, 0, group);
+  addCircularRailing(group, 3.35, 0.7, 28);
+  addCircularRailing(group, 2.75, 1.02, 22);
+  addFrontStairs(group, 1.55, 3.6, 0.16, 6);
+  addFrontStairs(group, 1.2, 2.85, 0.48, 5);
+
+  makeCylinder(1.34, 1.42, 1.1, materials.red, 0, 1.45, 0, group);
+  for (let i = 0; i < 16; i += 1) {
+    const angle = (Math.PI * 2 * i) / 16;
+    makeCylinder(0.045, 0.055, 1.06, materials.deepRed, Math.sin(angle) * 1.17, 1.45, Math.cos(angle) * 1.17, group);
+  }
+  const roof1 = makeRoundCone(2.05, 0.72, materials.templeBlue, 0, 2.26, 0, group, 32);
+  roof1.scale.y = 0.58;
+  addRadialRoofTiles(group, 1.95, 2.18, materials.glassBlue, 28);
+
+  makeCylinder(1.02, 1.08, 0.72, materials.red, 0, 2.58, 0, group);
+  const roof2 = makeRoundCone(1.64, 0.64, materials.templeBlue, 0, 3.12, 0, group, 32);
+  roof2.scale.y = 0.58;
+  addRadialRoofTiles(group, 1.54, 3.05, materials.glassBlue, 24);
+
+  makeCylinder(0.7, 0.78, 0.6, materials.red, 0, 3.38, 0, group);
+  const roof3 = makeRoundCone(1.18, 0.55, materials.templeBlue, 0, 3.84, 0, group, 32);
+  roof3.scale.y = 0.58;
+  addRadialRoofTiles(group, 1.1, 3.78, materials.glassBlue, 20);
+
+  makeCylinder(0.12, 0.16, 0.3, materials.gold, 0, 4.08, 0, group);
+  makeSphere(0.18, materials.gold, 0, 4.3, 0, group, 10);
+  createLabelPlane("\u7948\u5e74\u6bbf", 0.84, 0.32, 0, 2.62, 1.06, group, {
+    background: "#2468a8",
+    foreground: "#f7d87a",
+    fontSize: 40,
+  });
+}
+
+function addMonumentLandmark(group) {
+  makeBox(4.25, 0.24, 3.0, materials.stone, 0, 0.12, 0, group);
+  makeBox(3.45, 0.28, 2.32, materials.marble, 0, 0.42, 0, group);
+  makeBox(2.45, 0.34, 1.58, materials.stone, 0, 0.76, 0, group);
+  addStoneRailing(group, 4.25, 3.0, 0.78, 0);
+  addFrontStairs(group, 1.85, 1.72, 0.16, 6);
+
+  makeBox(1.05, 4.25, 0.72, materials.marble, 0, 3.05, 0, group);
+  makeBox(1.28, 0.22, 0.88, materials.stone, 0, 5.25, 0, group);
+  makeBox(1.0, 0.18, 0.72, materials.marble, 0, 5.48, 0, group);
+  const top = makeCone(0.56, 0.5, materials.marble, 0, 5.82, 0, group);
+  top.scale.z = 0.7;
+  top.rotation.y = Math.PI / 4;
+  makeBox(0.78, 2.78, 0.05, materials.stone, 0, 3.18, 0.39, group);
+  createLabelPlane("\u4eba\u6c11\u82f1\u96c4", 0.72, 0.34, 0, 3.8, 0.43, group, {
+    background: "#d8d0bd",
+    foreground: "#7c1d1d",
+    fontSize: 32,
+  });
+  for (let i = 0; i < 7; i += 1) {
+    makeSphere(0.055, materials.stone, -0.42 + i * 0.14, 1.22, 0.44, group, 8);
+    makeBox(0.06, 0.28, 0.04, materials.stone, -0.42 + i * 0.14, 1.02, 0.45, group);
+  }
+}
+
+function addCctvLandmark(group) {
+  const towerA = makeBox(1.0, 5.55, 0.92, materials.darkGlass, -1.08, 2.76, 0, group);
+  towerA.rotation.z = -0.18;
+  const towerB = makeBox(1.0, 5.65, 0.92, materials.darkGlass, 1.1, 2.82, 0, group);
+  towerB.rotation.z = 0.2;
+  const bridgeTop = makeBox(3.55, 0.92, 0.94, materials.darkGlass, 0.02, 5.12, 0, group);
+  bridgeTop.rotation.z = 0.04;
+  const bridgeLow = makeBox(2.25, 0.62, 0.86, materials.darkGlass, 0.08, 1.16, 0, group);
+  bridgeLow.rotation.z = -0.12;
+
+  for (const x of [-1.08, 1.1, 0.02]) {
+    for (let y = 1.1; y < 5.6; y += 0.72) {
+      const diagA = makeBox(0.055, 1.08, 0.07, materials.marble, x, y, 0.5, group);
+      diagA.rotation.z = 0.42;
+      const diagB = makeBox(0.055, 1.08, 0.07, materials.marble, x, y, 0.51, group);
+      diagB.rotation.z = -0.42;
+    }
+  }
+
+  makeBox(3.8, 0.2, 2.25, materials.stone, 0, 0.1, 0, group);
+  makeBox(0.9, 0.08, 0.58, materials.tankTrim, -1.15, 0.28, 0.84, group);
+  makeBox(0.9, 0.08, 0.58, materials.tankTrim, 1.15, 0.28, 0.84, group);
+  createLabelPlane("CCTV", 0.86, 0.32, 0, 0.68, 0.5, group, {
+    background: "#263d52",
+    foreground: "#bfefff",
+    fontSize: 42,
+  });
+}
+
 function buildLandmarkModel(group, type) {
   clearGroup(group);
   if (type === "tiananmen") addTiananmenLandmark(group);
@@ -680,17 +907,18 @@ function randomLandmarkType(excludedType = "") {
 
 function createLandmark(side, index) {
   const group = new THREE.Group();
-  group.position.x = side * (13.0 + (index % 2) * 0.95);
+  group.position.x = side * (9.55 + (index % 2) * 0.55);
+  group.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
   group.userData = {
-    baseZ: -176 + index * 30,
+    baseZ: -184 + index * 24,
     speedFactor: 0.76,
-    span: 180,
+    span: 192,
     isLandmark: true,
     side,
     lastZ: null,
     landmarkType: "",
   };
-  group.scale.setScalar(0.92 + (index % 3) * 0.08);
+  group.scale.setScalar(0.78 + (index % 3) * 0.06);
   buildLandmarkModel(group, randomLandmarkType());
   sceneryGroup.add(group);
   sceneryItems.push(group);
@@ -698,11 +926,11 @@ function createLandmark(side, index) {
 
 function buildScenery() {
   createBackdropGate();
-  for (let i = 0; i < 9; i += 1) {
+  for (let i = 0; i < 5; i += 1) {
     createBuilding(-1, i);
     createBuilding(1, i + 4);
   }
-  for (let i = 0; i < 18; i += 1) {
+  for (let i = 0; i < 16; i += 1) {
     createTree(-1, i);
     createTree(1, i + 7);
   }
@@ -710,7 +938,7 @@ function buildScenery() {
     createLamp(-1, i);
     createLamp(1, i + 3);
   }
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     createLandmark(i % 2 === 0 ? -1 : 1, i);
   }
 }
@@ -853,37 +1081,61 @@ function createTank(lane, z) {
 
   makeBox(1.82, 0.7, 2.78, materials.tank, 0, 0.72, -0.08, group);
   makeBox(1.96, 0.18, 2.68, materials.tankTrim, 0, 1.12, -0.16, group);
-  makeBox(2.18, 0.96, 0.34, materials.tankTrim, 0, 0.8, 1.5, group);
-  makeBox(1.8, 0.56, 0.14, materials.tank, 0, 0.86, 1.72, group);
-  makeBox(2.26, 0.26, 0.24, materials.tankDark, 0, 0.24, 1.6, group);
-  makeBox(1.48, 0.34, 0.08, materials.tankDark, 0, 0.52, 1.82, group);
-  makeBox(1.1, 0.54, 0.98, materials.tank, 0, 1.24, 0.18, group);
-  makeBox(0.76, 0.18, 0.66, materials.tankTrim, 0, 1.58, 0.2, group);
-  const hatch = makeCylinder(0.28, 0.32, 0.16, materials.tankDark, -0.18, 1.7, 0.12, group);
+  const frontArmor = makeBox(2.12, 0.82, 0.38, materials.tankTrim, 0, 0.78, 1.52, group);
+  frontArmor.rotation.x = -0.08;
+  const frontNose = makeBox(1.62, 0.46, 0.16, materials.tank, 0, 0.78, 1.78, group);
+  frontNose.rotation.x = -0.18;
+  makeBox(1.96, 0.24, 0.22, materials.tankDark, 0, 0.25, 1.62, group);
+  makeBox(1.28, 0.32, 0.08, materials.tankDark, 0, 0.52, 1.84, group);
+  const deckSlope = makeBox(1.7, 0.12, 0.66, materials.tankLight, 0, 1.2, 0.9, group);
+  deckSlope.rotation.x = -0.3;
+  makeBox(1.12, 0.58, 1.02, materials.tank, 0, 1.26, 0.18, group);
+  makeBox(0.92, 0.22, 0.72, materials.tankTrim, 0, 1.6, 0.2, group);
+  makeBox(0.6, 0.42, 0.22, materials.tankTrim, 0, 1.28, 0.88, group);
+  const hatchBase = makeCylinder(0.36, 0.42, 0.16, materials.tankTrim, 0.02, 1.73, 0.14, group);
+  hatchBase.rotation.y = Math.PI / 8;
+  const hatch = makeCylinder(0.26, 0.32, 0.14, materials.tankDark, 0.02, 1.88, 0.14, group);
   hatch.rotation.y = Math.PI / 5;
-  const cannon = makeCylinder(0.12, 0.15, 1.92, materials.tankDark, 0, 1.28, 1.38, group);
+  const cannon = makeCylinder(0.11, 0.15, 2.08, materials.tankDark, 0, 1.31, 1.42, group);
   cannon.rotation.x = Math.PI / 2;
-  const muzzle = makeCylinder(0.18, 0.18, 0.24, materials.tankMetal, 0, 1.28, 2.42, group);
+  const muzzle = makeCylinder(0.19, 0.19, 0.26, materials.tankMetal, 0, 1.31, 2.56, group);
   muzzle.rotation.x = Math.PI / 2;
 
   for (const sideX of [-0.88, 0.88]) {
-    makeBox(0.32, 0.52, 1.92, materials.tankDark, sideX, 0.34, -0.48, group);
-    makeBox(0.36, 0.18, 1.7, materials.tankMetal, sideX, 0.64, -0.52, group);
-    makeBox(0.28, 0.22, 0.12, materials.tankMetal, sideX, 0.26, 1.52, group);
-    for (const treadX of [-0.06, 0.06]) {
-      const frontWheel = makeCylinder(0.115, 0.115, 0.08, materials.tankLight, sideX + treadX, 0.32, 1.6, group);
+    makeBox(0.32, 0.54, 1.94, materials.tankDark, sideX, 0.34, -0.46, group);
+    makeBox(0.36, 0.2, 1.72, materials.tankMetal, sideX, 0.64, -0.52, group);
+    makeBox(0.3, 0.2, 0.18, materials.tankMetal, sideX, 0.21, 1.86, group);
+    makeBox(0.3, 0.16, 0.16, materials.tankMetal, sideX, 0.43, 1.94, group);
+    makeBox(0.3, 0.13, 0.14, materials.tankMetal, sideX, 0.62, 1.84, group);
+    for (const treadX of [-0.065, 0.065]) {
+      const frontWheel = makeCylinder(0.13, 0.13, 0.08, materials.tankLight, sideX + treadX, 0.34, 1.92, group);
       frontWheel.rotation.x = Math.PI / 2;
-      const hub = makeCylinder(0.045, 0.045, 0.09, materials.tankMetal, sideX + treadX, 0.32, 1.65, group);
+      const hub = makeCylinder(0.052, 0.052, 0.09, materials.tankMetal, sideX + treadX, 0.34, 1.97, group);
       hub.rotation.x = Math.PI / 2;
+    }
+    for (const wheelZ of [-1.1, -0.55, 0, 0.55]) {
+      const sideWheel = makeCylinder(0.16, 0.16, 0.08, materials.tankLight, sideX, 0.31, wheelZ, group);
+      sideWheel.rotation.z = Math.PI / 2;
+      makeCylinder(0.07, 0.07, 0.09, materials.tankMetal, sideX, 0.31, wheelZ, group).rotation.z = Math.PI / 2;
     }
   }
 
-  const star = makeCone(0.2, 0.08, materials.gold, 0, 0.9, 1.86, group);
-  star.rotation.x = -Math.PI / 2;
-  star.rotation.z = Math.PI / 4;
-  makeSphere(0.1, materials.window, -0.72, 0.74, 1.86, group, 8);
-  makeSphere(0.1, materials.window, 0.72, 0.74, 1.86, group, 8);
-  makeBox(0.16, 0.42, 0.08, materials.tankMetal, -0.72, 1.62, -0.24, group).rotation.z = -0.28;
+  for (const lightX of [-0.7, 0.7]) {
+    makeBox(0.28, 0.2, 0.08, materials.tankMetal, lightX, 0.74, 1.9, group);
+    makeSphere(0.1, materials.window, lightX, 0.74, 1.95, group, 8);
+  }
+
+  makeBox(0.18, 0.26, 0.16, materials.tankMetal, -0.48, 1.75, -0.08, group);
+  makeBox(0.44, 0.32, 0.34, materials.tankDark, -0.48, 1.98, -0.02, group);
+  makeBox(0.32, 0.2, 0.04, materials.glassBlue, -0.48, 1.98, 0.17, group);
+  makeCylinder(0.09, 0.11, 0.26, materials.tankMetal, 0.66, 1.78, -0.46, group);
+  const antenna = makeCylinder(0.024, 0.03, 1.34, materials.tankDark, 0.66, 2.56, -0.46, group);
+  makeSphere(0.04, materials.tankDark, antenna.position.x, 3.24, antenna.position.z, group, 8);
+
+  for (const hookX of [-0.42, 0.42]) {
+    const hook = makeBox(0.2, 0.32, 0.1, materials.gold, hookX, 0.98, 1.82, group);
+    hook.rotation.z = hookX < 0 ? -0.18 : 0.18;
+  }
 
   for (const boltX of [-0.72, -0.36, 0, 0.36, 0.72]) {
     makeSphere(0.045, materials.tankDark, boltX, 0.98, 1.58, group, 8);
@@ -901,8 +1153,8 @@ function createProjectile(tank) {
   const group = new THREE.Group();
   const tankData = tank.userData;
   const startX = tank.position.x;
-  const startZ = tankData.z + 2.48 * tank.scale.z;
-  const startY = 1.28 * tank.scale.y;
+  const startZ = tankData.z + 2.74 * tank.scale.z;
+  const startY = 1.31 * tank.scale.y;
 
   const body = makeCylinder(0.105, 0.13, 0.62, materials.projectile, 0, 0, 0, group);
   body.rotation.x = Math.PI / 2;

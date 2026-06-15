@@ -8,13 +8,22 @@
       content="一个原创低多边形 3D 无尽跑酷网页游戏，支持电脑键盘和手机触控。"
     />
     <title>长安街跑者 - 3D 无尽跑酷</title>
-    <link rel="stylesheet" href="style.css?v=tank-front-5" />
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.165.0/build/three.module.js"
-        }
-      }
+    <link rel="stylesheet" href="style.css?v=landmarks-2" />
+    <script>
+      window.__runnerBootErrors = [];
+      window.addEventListener("error", (event) => {
+        window.__runnerBootErrors.push({
+          message: event.message,
+          source: event.filename,
+          line: event.lineno,
+          column: event.colno,
+        });
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        window.__runnerBootErrors.push({
+          message: String(event.reason?.message || event.reason || "unhandled rejection"),
+        });
+      });
     </script>
   </head>
   <body>
@@ -79,6 +88,6 @@
     </main>
 
     <noscript>需要启用 JavaScript 才能游玩。</noscript>
-    <script type="module" src="main.js?v=tank-front-5"></script>
+    <script type="module" src="main.js?v=landmarks-2"></script>
   </body>
 </html>
