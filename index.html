@@ -9,22 +9,6 @@
     />
     <title>长安街跑者 - 3D 无尽跑酷</title>
     <link rel="stylesheet" href="style.css?v=landmarks-2" />
-    <script>
-      window.__runnerBootErrors = [];
-      window.addEventListener("error", (event) => {
-        window.__runnerBootErrors.push({
-          message: event.message,
-          source: event.filename,
-          line: event.lineno,
-          column: event.colno,
-        });
-      });
-      window.addEventListener("unhandledrejection", (event) => {
-        window.__runnerBootErrors.push({
-          message: String(event.reason?.message || event.reason || "unhandled rejection"),
-        });
-      });
-    </script>
   </head>
   <body>
     <main class="game-shell" aria-label="长安街跑者游戏">
@@ -88,6 +72,6 @@
     </main>
 
     <noscript>需要启用 JavaScript 才能游玩。</noscript>
-    <script type="module" src="main.js?v=landmarks-2"></script>
+    <script type="module" src="main.js?v=landmarks-3"></script>
   </body>
 </html>
