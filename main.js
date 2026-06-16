@@ -234,6 +234,9 @@ function toggleMusic() {
   }
 }
 
+const isMobileView = () =>
+  window.innerWidth <= 780 || window.matchMedia?.("(hover: none), (pointer: coarse)")?.matches;
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x83c9ff);
 scene.fog = new THREE.Fog(0x83c9ff, 42, 138);
@@ -241,7 +244,7 @@ scene.fog = new THREE.Fog(0x83c9ff, 42, 138);
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 220);
 const renderer = new THREE.WebGLRenderer({
   canvas,
-  antialias: true,
+  antialias: !isMobileView(),
   powerPreference: "high-performance",
 });
 renderer.shadowMap.enabled = true;
@@ -431,7 +434,7 @@ function buildLights() {
   const sun = new THREE.DirectionalLight(0xffffff, 2.65);
   sun.position.set(-9, 16, 12);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(isMobileView() ? 1024 : 2048, isMobileView() ? 1024 : 2048);
   sun.shadow.camera.left = -30;
   sun.shadow.camera.right = 30;
   sun.shadow.camera.top = 30;
@@ -458,14 +461,17 @@ const sceneryItems = [];
 const dustPool = [];
 
 function buildMotionStrips() {
-  for (let i = 0; i < 34; i += 1) {
+  const dashCount = isMobileView() ? 24 : 34;
+  const speedLineCount = isMobileView() ? 28 : 46;
+
+  for (let i = 0; i < dashCount; i += 1) {
     for (const x of [-1.6, 1.6]) {
       const dash = makeBox(0.13, 0.055, 3.3, materials.laneWhite, x, 0.05, -i * 5, roadGroup);
       dashMeshes.push({ mesh: dash, base: -i * 5 });
     }
   }
 
-  for (let i = 0; i < 46; i += 1) {
+  for (let i = 0; i < speedLineCount; i += 1) {
     const x = (i % 2 === 0 ? -1 : 1) * (2.5 + Math.random() * 2.45);
     const line = makeBox(0.06, 0.045, 3.4 + Math.random() * 3.5, materials.speedLine, x, 0.085, -i * 3.2, roadGroup);
     line.visible = false;
@@ -841,25 +847,32 @@ function createLandmark(side, index) {
 
 function buildScenery() {
   createBackdropGate();
-  for (let i = 0; i < 3; i += 1) {
+  const mobile = isMobileView();
+  const buildingCount = mobile ? 2 : 3;
+  const treeCount = mobile ? 10 : 16;
+  const lampCount = mobile ? 8 : 13;
+  const landmarkCount = mobile ? 6 : 8;
+
+  for (let i = 0; i < buildingCount; i += 1) {
     createBuilding(-1, i);
     createBuilding(1, i + 4);
   }
-  for (let i = 0; i < 16; i += 1) {
+  for (let i = 0; i < treeCount; i += 1) {
     createTree(-1, i);
     createTree(1, i + 7);
   }
-  for (let i = 0; i < 13; i += 1) {
+  for (let i = 0; i < lampCount; i += 1) {
     createLamp(-1, i);
     createLamp(1, i + 3);
   }
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < landmarkCount; i += 1) {
     createLandmark(i % 2 === 0 ? -1 : 1, i);
   }
 }
 
 function buildDustPool() {
-  for (let i = 0; i < 34; i += 1) {
+  const dustCount = isMobileView() ? 20 : 34;
+  for (let i = 0; i < dustCount; i += 1) {
     const particle = makeSphere(0.08, materials.dust, 0, -20, 0, particleGroup, 8);
     particle.visible = false;
     particle.userData.life = 0;
@@ -1058,7 +1071,7 @@ function createTank(lane, z) {
 
   group.position.set(LANES[lane], 0.03, z);
   group.rotation.y = 0;
-  group.scale.set(1.48, 2.08, 1.72);
+  group.scale.set(1.48, 1.78, 1.72);
   setMeshShadow(group);
   obstacleGroup.add(group);
   return group;
@@ -1870,10 +1883,12 @@ function loop(now) {
 function resize() {
   game.width = window.innerWidth;
   game.height = window.innerHeight;
+  const mobile = isMobileView();
   camera.aspect = game.width / game.height;
-  camera.fov = game.width < 640 ? 66 : 58;
+  camera.fov = mobile ? 66 : 58;
   camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = !mobile;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.15 : 1.75));
   renderer.setSize(game.width, game.height, false);
 }
 

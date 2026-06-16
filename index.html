@@ -8,7 +8,7 @@
       content="一个原创低多边形 3D 无尽跑酷网页游戏，支持电脑键盘和手机触控。"
     />
     <title>长安街跑者 - 3D 无尽跑酷</title>
-    <link rel="stylesheet" href="style.css?v=landmarks-2" />
+    <link rel="stylesheet" href="style.css?v=mobilefix-1" />
   </head>
   <body>
     <main class="game-shell" aria-label="长安街跑者游戏">
@@ -111,7 +111,7 @@
 
       try {
         window.THREE = await loadThree();
-        await import("./main.js?v=scalefix-1");
+        await import("./main.js?v=mobilefix-1");
         startButton.disabled = false;
         startButton.textContent = originalButtonText;
       } catch (error) {
