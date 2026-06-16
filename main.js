@@ -60,6 +60,7 @@ const game = {
   rocketFireCooldown: 0,
   flashTimer: 0,
   lastFrame: 0,
+  hudTimer: 0,
 };
 
 const music = {
@@ -244,12 +245,21 @@ scene.fog = new THREE.Fog(0x83c9ff, 42, 138);
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 220);
 const renderer = new THREE.WebGLRenderer({
   canvas,
-  antialias: !isMobileView(),
+  antialias: true,
   powerPreference: "high-performance",
 });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+
+const renderQuality = {
+  pixelRatio: 1,
+  frameTimeSum: 0,
+  frameSamples: 0,
+  lastAdjustment: 0,
+};
 
 const world = new THREE.Group();
 const roadGroup = new THREE.Group();
@@ -461,8 +471,8 @@ const sceneryItems = [];
 const dustPool = [];
 
 function buildMotionStrips() {
-  const dashCount = isMobileView() ? 24 : 34;
-  const speedLineCount = isMobileView() ? 28 : 46;
+  const dashCount = isMobileView() ? 32 : 34;
+  const speedLineCount = isMobileView() ? 42 : 46;
 
   for (let i = 0; i < dashCount; i += 1) {
     for (const x of [-1.6, 1.6]) {
@@ -848,10 +858,10 @@ function createLandmark(side, index) {
 function buildScenery() {
   createBackdropGate();
   const mobile = isMobileView();
-  const buildingCount = mobile ? 2 : 3;
-  const treeCount = mobile ? 10 : 16;
-  const lampCount = mobile ? 8 : 13;
-  const landmarkCount = mobile ? 6 : 8;
+  const buildingCount = 3;
+  const treeCount = mobile ? 14 : 16;
+  const lampCount = mobile ? 11 : 13;
+  const landmarkCount = 8;
 
   for (let i = 0; i < buildingCount; i += 1) {
     createBuilding(-1, i);
@@ -871,7 +881,7 @@ function buildScenery() {
 }
 
 function buildDustPool() {
-  const dustCount = isMobileView() ? 20 : 34;
+  const dustCount = isMobileView() ? 30 : 34;
   for (let i = 0; i < dustCount; i += 1) {
     const particle = makeSphere(0.08, materials.dust, 0, -20, 0, particleGroup, 8);
     particle.visible = false;
@@ -1321,6 +1331,7 @@ function resetGame() {
   game.rocketEquipTimer = 0;
   game.rocketFireCooldown = 0;
   game.flashTimer = 0;
+  game.hudTimer = 0;
   player.root.visible = true;
   if (player.rocketLauncher) player.rocketLauncher.visible = false;
   startScreen.classList.add("hidden");
@@ -1853,7 +1864,11 @@ function update(dt) {
     updateProjectiles(dt);
     updatePickups(dt);
     checkCollision();
-    updateHud();
+    game.hudTimer -= dt;
+    if (game.hudTimer <= 0) {
+      updateHud();
+      game.hudTimer = isMobileView() ? 0.08 : 0.05;
+    }
   }
 
   updatePlayer(dt);
@@ -1871,10 +1886,73 @@ function renderFlash() {
   }, 0);
 }
 
+function getRenderQualityBounds() {
+  const deviceRatio = window.devicePixelRatio || 1;
+
+  if (isMobileView()) {
+    return {
+      min: Math.min(deviceRatio, 1.25),
+      target: Math.min(deviceRatio, 1.65),
+      max: Math.min(deviceRatio, 1.75),
+    };
+  }
+
+  return {
+    min: Math.min(deviceRatio, 1.55),
+    target: Math.min(deviceRatio, 1.9),
+    max: Math.min(deviceRatio, 2),
+  };
+}
+
+function applyRenderPixelRatio(value) {
+  const nextRatio = clamp(Math.round(value * 100) / 100, 0.9, 2.25);
+  if (Math.abs(renderQuality.pixelRatio - nextRatio) < 0.02) return;
+
+  renderQuality.pixelRatio = nextRatio;
+  renderer.setPixelRatio(nextRatio);
+  renderer.setSize(game.width, game.height, false);
+}
+
+function resetRenderQuality() {
+  const bounds = getRenderQualityBounds();
+  renderQuality.frameTimeSum = 0;
+  renderQuality.frameSamples = 0;
+  renderQuality.lastAdjustment = game.time;
+  applyRenderPixelRatio(bounds.target);
+}
+
+function updateRenderQuality(dt) {
+  if (!isMobileView() || !Number.isFinite(dt) || dt <= 0) return;
+
+  renderQuality.frameTimeSum += dt;
+  renderQuality.frameSamples += 1;
+
+  if (renderQuality.frameSamples < 50) return;
+
+  const averageFrameTime = renderQuality.frameTimeSum / renderQuality.frameSamples;
+  const bounds = getRenderQualityBounds();
+  let nextRatio = renderQuality.pixelRatio;
+
+  if (averageFrameTime > 0.028) {
+    nextRatio -= 0.16;
+  } else if (averageFrameTime > 0.023) {
+    nextRatio -= 0.08;
+  } else if (averageFrameTime < 0.0175) {
+    nextRatio += 0.05;
+  }
+
+  applyRenderPixelRatio(clamp(nextRatio, bounds.min, bounds.max));
+  renderQuality.frameTimeSum = 0;
+  renderQuality.frameSamples = 0;
+  renderQuality.lastAdjustment = game.time;
+}
+
 function loop(now) {
-  const dt = Math.min(0.033, (now - game.lastFrame) / 1000 || 0);
+  const rawDt = game.lastFrame ? (now - game.lastFrame) / 1000 : 0;
+  const dt = Math.min(0.033, rawDt || 0);
   game.lastFrame = now;
   update(dt);
+  updateRenderQuality(rawDt || dt);
   renderFlash();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -1887,8 +1965,8 @@ function resize() {
   camera.aspect = game.width / game.height;
   camera.fov = mobile ? 66 : 58;
   camera.updateProjectionMatrix();
-  renderer.shadowMap.enabled = !mobile;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.15 : 1.75));
+  renderer.shadowMap.enabled = true;
+  resetRenderQuality();
   renderer.setSize(game.width, game.height, false);
 }
 
